@@ -1,0 +1,48 @@
+.summary-prompt {
+  background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+  border: 3px solid #667eea;
+  box-shadow: 0 10px 40px rgba(102, 126, 234, 0.3);
+  position: relative;
+  z-index: 1000;
+  animation: popupSlideIn 0.3s ease-out;
+}
+
+@keyframes popupSlideIn {
+  from {
+    opacity: 0;
+    transform: translateY(-30px) scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.summary-prompt h3 {
+  color: #667eea;
+  margin-bottom: 1rem;
+}
+
+.summary-prompt p {
+  color: #555;
+  line-height: 1.6;
+  margin-bottom: 1.5rem;
+}
+
+.button-group {
+  display: flex;
+  gap: 1rem;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+
+.generating-section {
+  text-align: center;
+  margin: 1.5rem 0;
+}
+
+.generating-section p {
+  margin-top: 1rem;
+  color: #666;
+}
+

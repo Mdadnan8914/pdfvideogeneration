@@ -18,12 +18,13 @@ from app.phase1_pdf_processing.image_extractor import extract_images
 from app.phase1_pdf_processing.text_cleaner import clean_text
 
 from app.phase2_ai_services.openai_client import OpenAIService, detect_book_genre
+from app.phase2_ai_services.cartesia_client import CartesiaService
 from app.phase2_ai_services.book_summary import generate_book_summary
 from app.phase3_audio_processing.mastering import master_audio
 from app.phase4_video_generation.renderer import render_video
 
 
-def main(pdf_file_path: Path):
+def main(pdf_file_path: Path, start_page: int = 50, end_page: int = 50, generate_summary: bool = False, voice_provider: str = "openai"):
     start_time = time.time()
     
     # --- A. Setup ---
@@ -69,10 +70,8 @@ def main(pdf_file_path: Path):
         logger.info(f"Book type detected: {book_type}")
         logger.info(f"Tables found: {extraction_result['summary']['tables_count']}")
 
-        # Optionally filter text to a specific page range (current request: page 50 only)
-        start_page = 50
-        end_page = 50
-        logger.warning(f"Filtering text to pages {start_page}-{end_page} for main video.")
+        # Filter text to a specific page range
+        logger.info(f"Filtering text to pages {start_page}-{end_page} for main video.")
         json_path = Path(extraction_result["output_files"]["json"])
         with open(json_path, 'r', encoding='utf-8') as f:
             data = json.load(f)
@@ -131,8 +130,15 @@ def main(pdf_file_path: Path):
 
         _write_metadata()
         
-        openai_service = OpenAIService(voice="onyx")
-        raw_audio_path, timestamps_path = openai_service.generate_audio_with_timestamps(
+        # Initialize voice service based on provider
+        if voice_provider.lower() == "cartesia":
+            logger.info(f"Using Cartesia for voice generation")
+            voice_service = CartesiaService(voice_id="c961b81c-a935-4c17-bfb3-ba2239de8c2f")  # Kyle - expressive voice
+        else:
+            logger.info(f"Using OpenAI for voice generation")
+            voice_service = OpenAIService(voice="onyx")
+        
+        raw_audio_path, timestamps_path = voice_service.generate_audio_with_timestamps(
             text=text_script,  # Using cleaned text (image references removed)
             output_dir=job_dir,
             job_id=job_id,
@@ -160,32 +166,35 @@ def main(pdf_file_path: Path):
         logger.info(f"--- FULL PIPELINE SUCCESS (Total time: {end_time - start_time:.2f}s) ---")
         logger.info(f"Final Video: {final_video_path}")
 
-        # ===== SUMMARY GENERATION =====
+        # ===== SUMMARY GENERATION (OPTIONAL) =====
         summary_text = None
         summary_stats = None
         summary_path = job_dir / f"{job_id}_summary.txt"
 
-        try:
-            logger.info("--- SUMMARY GENERATION (Target ~1 hour narration) ---")
-            summary_text, summary_stats = generate_book_summary(
-                book_text=text_script,
-                book_title=book_title,
-                genre=genre,
-                book_type=book_type,
-                target_word_count=settings.SUMMARY_TARGET_WORDS,
-                max_word_count=settings.SUMMARY_MAX_WORDS
-            )
-            summary_path.write_text(summary_text, encoding='utf-8')
-            logger.info(
-                f"Summary saved to {summary_path} (~{summary_stats['word_count']} words, est {summary_stats['estimated_minutes']} min)."
-            )
-            job_metadata["summary"] = {
-                "path": str(summary_path),
-                **summary_stats
-            }
-            _write_metadata()
-        except Exception as summary_error:
-            logger.error("Summary generation failed. Skipping summary video prompt.", exc_info=True)
+        if generate_summary:
+            try:
+                logger.info("--- SUMMARY GENERATION (Target ~1 hour narration) ---")
+                summary_text, summary_stats = generate_book_summary(
+                    book_text=text_script,
+                    book_title=book_title,
+                    genre=genre,
+                    book_type=book_type,
+                    target_word_count=settings.SUMMARY_TARGET_WORDS,
+                    max_word_count=settings.SUMMARY_MAX_WORDS
+                )
+                summary_path.write_text(summary_text, encoding='utf-8')
+                logger.info(
+                    f"Summary saved to {summary_path} (~{summary_stats['word_count']} words, est {summary_stats['estimated_minutes']} min)."
+                )
+                job_metadata["summary"] = {
+                    "path": str(summary_path),
+                    **summary_stats
+                }
+                _write_metadata()
+            except Exception as summary_error:
+                logger.error("Summary generation failed. Skipping summary video prompt.", exc_info=True)
+        else:
+            logger.info("Summary generation skipped (not requested).")
 
         # ===== OPTIONAL SUMMARY VIDEO =====
         if summary_text:
@@ -202,7 +211,7 @@ def main(pdf_file_path: Path):
                 summary_job_dir.mkdir(exist_ok=True)
                 summary_job_id = f"{job_id}_summary"
 
-                summary_raw_audio_path, summary_timestamps_path = openai_service.generate_audio_with_timestamps(
+                summary_raw_audio_path, summary_timestamps_path = voice_service.generate_audio_with_timestamps(
                     text=summary_text,
                     output_dir=summary_job_dir,
                     job_id=summary_job_id,
@@ -235,13 +244,48 @@ def main(pdf_file_path: Path):
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Run the full PDF-to-Video pipeline.")
+    parser = argparse.ArgumentParser(
+        description="Run the full PDF-to-Video pipeline.",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+  # Basic usage (page 50, OpenAI voice)
+  python scripts/run_full_pipeline.py "path/to/book.pdf"
+  
+  # Custom page range
+  python scripts/run_full_pipeline.py "path/to/book.pdf" --start-page 10 --end-page 20
+  
+  
+  # Generate summary
+  python scripts/run_full_pipeline.py "path/to/book.pdf" --generate-summary
+  
+  # Full options
+  python scripts/run_full_pipeline.py "path/to/book.pdf" --start-page 1 --end-page 100 --generate-summary
+        """
+    )
     parser.add_argument("pdf_path", type=str, help="Path to the input PDF file.")
+    parser.add_argument("--start-page", type=int, default=50, help="Start page for video (default: 50)")
+    parser.add_argument("--end-page", type=int, default=50, help="End page for video (default: 50)")
+    parser.add_argument("--generate-summary", action="store_true",
+                        help="Generate book summary (optional)")
+    parser.add_argument("--voice-provider", type=str, default="openai", choices=["openai", "cartesia"],
+                        help="Voice provider to use: 'openai' or 'cartesia' (default: openai)")
+    
     args = parser.parse_args()
     
     input_pdf = Path(args.pdf_path)
     if not input_pdf.exists():
         print(f"Error: PDF file not found at {input_pdf}")
         sys.exit(1)
+    
+    if args.start_page > args.end_page:
+        print(f"Error: Start page ({args.start_page}) must be <= end page ({args.end_page})")
+        sys.exit(1)
         
-    main(pdf_file_path=input_pdf)
+    main(
+        pdf_file_path=input_pdf,
+        start_page=args.start_page,
+        end_page=args.end_page,
+        generate_summary=args.generate_summary,
+        voice_provider=args.voice_provider
+    )

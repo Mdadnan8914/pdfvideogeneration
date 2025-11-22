@@ -1,0 +1,165 @@
+.job-info {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1.5rem;
+  padding: 1rem;
+  background: #f8f9fa;
+  border-radius: 8px;
+}
+
+.job-id {
+  font-family: monospace;
+  color: #666;
+}
+
+.status-section {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.progress-section {
+  margin: 1.5rem 0;
+}
+
+.progress-title {
+  font-weight: 600;
+  color: #333;
+  margin-bottom: 0.4rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.progress-icon {
+  font-size: 1.2em;
+}
+
+.progress-stage {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 0.75rem;
+  padding: 0.5rem;
+  background: #f0f4ff;
+  border-radius: 6px;
+  font-size: 0.9em;
+  color: #555;
+}
+
+.stage-indicator {
+  font-size: 1.1em;
+}
+
+.progress-info {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 0.5rem;
+}
+
+.progress-text {
+  color: #666;
+  font-style: italic;
+  flex: 1;
+}
+
+.progress-percentage {
+  color: #667eea;
+  font-weight: 600;
+  font-size: 1.1rem;
+  margin-left: 1rem;
+  min-width: 50px;
+  text-align: right;
+}
+
+.download-section {
+  margin-top: 1.5rem;
+  text-align: center;
+}
+
+.metadata-section {
+  margin-top: 2rem;
+  padding-top: 1.5rem;
+  border-top: 2px solid #e0e0e0;
+}
+
+.metadata-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 1rem;
+  margin-top: 1rem;
+}
+
+.metadata-grid > div {
+  padding: 0.75rem;
+  background: #f8f9fa;
+  border-radius: 6px;
+}
+
+.metadata-item {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.75rem;
+  background: #f8f9fa;
+  border-radius: 6px;
+  transition: background 0.2s ease;
+}
+
+.metadata-item:hover {
+  background: #e9ecef;
+}
+
+.metadata-icon {
+  font-size: 1.2em;
+  flex-shrink: 0;
+}
+
+.success-icon {
+  font-size: 1.5em;
+  color: #28a745;
+  margin-right: 0.5rem;
+}
+
+.spinner-small {
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  border-top-color: #fff;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+  margin-right: 0.5rem;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.download-section .btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 1rem;
+}
+
+.alert.alert-success {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  padding: 1rem;
+  background: #d4edda;
+  border: 1px solid #c3e6cb;
+  border-radius: 6px;
+  color: #155724;
+}
+
+.alert.alert-success strong {
+  display: block;
+  margin-bottom: 0.25rem;
+}
+

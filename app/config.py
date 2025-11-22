@@ -25,19 +25,29 @@ class Settings(BaseSettings):
     )
     
     # --- Project Paths ---
-    ASSETS_PATH: Path = PROJECT_ROOT / "assets"
-    FONTS_PATH: Path = ASSETS_PATH / "fonts"
-    BACKGROUNDS_PATH: Path = ASSETS_PATH / "backgrounds"
-    JOBS_OUTPUT_PATH: Path = PROJECT_ROOT / "jobs"
+    # Support environment variables for AWS deployment
+    # If AWS paths are set, use them; otherwise use project-relative paths
+    _assets_path = os.getenv('ASSETS_PATH')
+    ASSETS_PATH: Path = Path(_assets_path) if _assets_path else (PROJECT_ROOT / "assets")
+    
+    _fonts_path = os.getenv('FONTS_PATH')
+    FONTS_PATH: Path = Path(_fonts_path) if _fonts_path else (ASSETS_PATH / "fonts")
+    
+    _backgrounds_path = os.getenv('BACKGROUNDS_PATH')
+    BACKGROUNDS_PATH: Path = Path(_backgrounds_path) if _backgrounds_path else (ASSETS_PATH / "backgrounds")
+    
+    _jobs_path = os.getenv('JOBS_OUTPUT_PATH')
+    JOBS_OUTPUT_PATH: Path = Path(_jobs_path) if _jobs_path else (PROJECT_ROOT / "jobs")
     
     # --- API Keys (Loaded from .env) ---
     # Try to get from environment first (loaded by dotenv), then from .env file
     OPENAI_API_KEY: str = os.getenv('OPENAI_API_KEY', "sk-...")  # Default,
+    CARTESIA_API_KEY: str = os.getenv('CARTESIA_API_KEY', "")  # Optional, for Cartesia TTS
     SERPER_API_KEY: str = os.getenv('SERPER_API_KEY', "")  # Optional, for genre detection
     
     # --- Video & Text Settings (from your files) ---
-    DEFAULT_FONT_REGULAR: str = str(FONTS_PATH / "PlayfairDisplay-Regular.ttf")
-    DEFAULT_FONT_BOLD: str = str(FONTS_PATH / "PlayfairDisplay-Medium.ttf")
+    DEFAULT_FONT_REGULAR: str = str(FONTS_PATH / "Book Antiqua.ttf")
+    DEFAULT_FONT_BOLD: str = str(FONTS_PATH / "Book Antiqua.ttf")
     DEFAULT_BACKGROUND: str = str(BACKGROUNDS_PATH / "1920x1080-white-solid-color-background.jpg") #for 1080 p quality
     # DEFAULT_BACKGROUND: str = str(BACKGROUNDS_PATH / "854x480-white-background.jpg")     #for 480 p quality
     

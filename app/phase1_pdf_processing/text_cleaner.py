@@ -1,6 +1,8 @@
 import logging
 import re
+import csv
 from pathlib import Path
+from typing import Set, List
 
 logger = logging.getLogger(__name__)
 
@@ -130,6 +132,145 @@ def _remove_image_references(text: str) -> str:
     return cleaned_text.strip()
 
 
+def _extract_table_text(tables_dir: Path) -> Set[str]:
+    """
+    Extract all text content from table CSV files.
+    
+    Args:
+        tables_dir: Directory containing table CSV files
+        
+    Returns:
+        Set of unique text phrases from all tables (headers + cell values)
+    """
+    table_texts = set()
+    
+    if not tables_dir or not tables_dir.exists():
+        return table_texts
+    
+    # Find all CSV files in tables directory
+    csv_files = list(tables_dir.glob("*.csv"))
+    
+    if not csv_files:
+        logger.debug(f"No CSV files found in {tables_dir}")
+        return table_texts
+    
+    logger.info(f"Extracting text from {len(csv_files)} table CSV files...")
+    
+    for csv_file in csv_files:
+        try:
+            with open(csv_file, 'r', encoding='utf-8', newline='') as f:
+                reader = csv.reader(f)
+                for row in reader:
+                    for cell in row:
+                        if cell and cell.strip():
+                            # Add the cell value
+                            cell_text = cell.strip()
+                            table_texts.add(cell_text)
+                            
+                            # Also add individual words for better matching
+                            # (handles cases where table text appears as part of sentences)
+                            words = re.findall(r'\b\w+\b', cell_text)
+                            for word in words:
+                                if len(word) > 2:  # Only add words longer than 2 chars
+                                    table_texts.add(word)
+        except Exception as e:
+            logger.warning(f"Error reading table file {csv_file}: {e}")
+            continue
+    
+    logger.info(f"Extracted {len(table_texts)} unique text phrases from tables")
+    return table_texts
+
+
+def _remove_table_content(text: str, tables_dir: Path) -> str:
+    """
+    Remove table content from text by matching table cell values.
+    
+    Args:
+        text: Text content to clean
+        tables_dir: Directory containing table CSV files
+        
+    Returns:
+        Text with table content removed
+    """
+    if not tables_dir or not tables_dir.exists():
+        return text
+    
+    table_texts = _extract_table_text(tables_dir)
+    
+    if not table_texts:
+        return text
+    
+    cleaned_text = text
+    removed_count = 0
+    
+    # Strategy: Remove table-like patterns more carefully
+    # 1. Remove lines that look like table rows (multiple table values in one line)
+    lines = cleaned_text.split('\n')
+    filtered_lines = []
+    
+    for line in lines:
+        line_stripped = line.strip()
+        if not line_stripped:
+            filtered_lines.append(line)
+            continue
+        
+        # Check if line contains multiple table values (likely a table row)
+        # Only consider longer table values (5+ chars) to avoid false positives
+        table_matches = []
+        for table_val in table_texts:
+            if len(table_val) >= 5 and table_val.lower() in line_stripped.lower():
+                # Check if it's a word boundary match (not part of a larger word)
+                pattern = r'\b' + re.escape(table_val) + r'\b'
+                if re.search(pattern, line_stripped, re.IGNORECASE):
+                    table_matches.append(table_val)
+        
+        # If line contains 3+ table values, it's likely a table row
+        if len(table_matches) >= 3:
+            removed_count += 1
+            logger.debug(f"Removed table row: {line_stripped[:80]}...")
+            continue
+        
+        # Also check for tab-separated or pipe-separated values (common table formats)
+        if '\t' in line or '|' in line:
+            # Count non-empty cells
+            cells = [c.strip() for c in re.split(r'[\t|]+', line) if c.strip()]
+            if len(cells) >= 3:  # Likely a table row if 3+ columns
+                # Check if cells match table values
+                matching_cells = sum(1 for cell in cells if any(
+                    len(val) >= 5 and val.lower() == cell.lower() for val in table_texts
+                ))
+                if matching_cells >= 2:  # 2+ matching cells = likely table row
+                    removed_count += 1
+                    logger.debug(f"Removed table row (tab/pipe separated): {line_stripped[:80]}...")
+                    continue
+        
+        filtered_lines.append(line)
+    
+    cleaned_text = '\n'.join(filtered_lines)
+    
+    # 2. Remove standalone table cell values that appear as isolated phrases
+    # Only remove if they're very likely to be table content (numeric, short, etc.)
+    for table_text in sorted(table_texts, key=len, reverse=True):
+        if len(table_text) < 4 or len(table_text) > 50:  # Skip very short or very long
+            continue
+        
+        # Only remove if it's a standalone line or phrase
+        # Pattern: line that is just the table value (possibly with whitespace)
+        pattern = r'^\s*' + re.escape(table_text) + r'\s*$'
+        if re.search(pattern, cleaned_text, re.IGNORECASE | re.MULTILINE):
+            cleaned_text = re.sub(pattern, '', cleaned_text, flags=re.IGNORECASE | re.MULTILINE)
+            removed_count += 1
+    
+    # Clean up extra whitespace created by removals
+    cleaned_text = re.sub(r'[ \t]+', ' ', cleaned_text)  # Multiple spaces/tabs to single space
+    cleaned_text = re.sub(r'\n{3,}', '\n\n', cleaned_text)  # Multiple newlines to double
+    
+    if removed_count > 0:
+        logger.info(f"Removed table content: {removed_count} table rows/phrases removed")
+    
+    return cleaned_text.strip()
+
+
 def clean_text(
     raw_text_path: Path, 
     tables_dir: Path, 
@@ -139,11 +280,10 @@ def clean_text(
     """
     Cleans the raw text by:
     1. Removing image reference sentences (e.g., "see image below", "as shown in the figure")
-    2. Cleaning punctuation for natural speech (e.g., "and/or" -> "and or", removing "slash")
-    3. Preserving legitimate numeric expressions (decimals, ranges)
-    4. Removing URLs and email addresses
-    5. Table content removal (future implementation)
-    6. Image caption removal (future implementation)
+    2. Removing table content (headers and cell values from extracted tables)
+    3. Cleaning punctuation for natural speech (e.g., "and/or" -> "and or", removing "slash")
+    4. Preserving legitimate numeric expressions (decimals, ranges)
+    5. Removing URLs and email addresses
     
     Args:
         raw_text_path: Path to raw extracted text
@@ -168,7 +308,10 @@ def clean_text(
         # Step 1: Remove image references
         cleaned_text = _remove_image_references(raw_text)
         
-        # Step 2: Clean punctuation for natural speech
+        # Step 2: Remove table content
+        cleaned_text = _remove_table_content(cleaned_text, tables_dir)
+        
+        # Step 3: Clean punctuation for natural speech
         cleaned_text = _clean_punctuation_for_speech(cleaned_text)
         
         logger.info(f"Cleaned text: {len(cleaned_text)} characters (removed {len(raw_text) - len(cleaned_text)} chars)")

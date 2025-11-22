@@ -1,0 +1,96 @@
+.cartesia-config {
+  margin-top: 1rem;
+  padding: 1rem;
+  background-color: #f8f9fa;
+  border-radius: 8px;
+  border: 1px solid #dee2e6;
+}
+
+.cartesia-config .form-group {
+  margin-bottom: 1rem;
+}
+
+.cartesia-config .form-group:last-child {
+  margin-bottom: 0;
+}
+
+.cartesia-config label {
+  display: block;
+  margin-bottom: 0.5rem;
+  font-weight: 500;
+  color: #333;
+}
+
+.cartesia-config select {
+  width: 100%;
+  padding: 0.5rem;
+  border: 1px solid #ced4da;
+  border-radius: 4px;
+  font-size: 1rem;
+  background-color: white;
+}
+
+.cartesia-config select:disabled {
+  background-color: #e9ecef;
+  cursor: not-allowed;
+}
+
+.cartesia-config .form-help {
+  display: block;
+  margin-top: 0.25rem;
+  font-size: 0.875rem;
+  color: #6c757d;
+}
+
+.voice-details {
+  margin-top: 0.75rem;
+  padding: 0.75rem;
+  background-color: white;
+  border-radius: 4px;
+  border: 1px solid #dee2e6;
+}
+
+.voice-description {
+  margin: 0 0 0.5rem 0;
+  font-size: 0.9rem;
+  color: #495057;
+}
+
+.voice-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-bottom: 0.5rem;
+}
+
+.voice-tags .tag {
+  display: inline-block;
+  padding: 0.25rem 0.5rem;
+  background-color: #007bff;
+  color: white;
+  border-radius: 12px;
+  font-size: 0.75rem;
+  font-weight: 500;
+}
+
+.voice-language {
+  display: block;
+  color: #6c757d;
+  font-size: 0.875rem;
+}
+
+.loading {
+  text-align: center;
+  padding: 1rem;
+  color: #6c757d;
+}
+
+.alert-warning {
+  padding: 0.75rem;
+  margin-bottom: 1rem;
+  background-color: #fff3cd;
+  border: 1px solid #ffc107;
+  border-radius: 4px;
+  color: #856404;
+}
+

@@ -568,15 +568,27 @@ class OpenAIService:
             # Check if text needs to be chunked
             instructions_tokens = self._estimate_tokens(instructions)
             safe_limit = 1900  # Leave ~100 tokens for metadata/overhead
+            
+            # If instructions themselves exceed the limit, truncate them
+            max_instruction_tokens = 1500  # Max tokens for instructions
+            if instructions_tokens > max_instruction_tokens:
+                logger.warning(
+                    f"Voice instructions are too long ({instructions_tokens} tokens). "
+                    f"Truncating to {max_instruction_tokens} tokens to fit within API limits."
+                )
+                # Truncate instructions to fit
+                max_instruction_chars = max_instruction_tokens * 4  # Rough estimate
+                instructions = instructions[:max_instruction_chars]
+                instructions_tokens = self._estimate_tokens(instructions)
+            
             dynamic_max_tokens = min(
                 self.max_tokens_per_chunk,
                 max(200, safe_limit - instructions_tokens)
             )
             if dynamic_max_tokens < 200:
                 logger.warning(
-                    "Voice instructions are extremely long (%s tokens). "
-                    "This leaves little room for text. Consider shortening instructions.",
-                    instructions_tokens
+                    f"Voice instructions are very long ({instructions_tokens} tokens). "
+                    f"Using minimal chunk size of 200 tokens. Consider shortening instructions."
                 )
                 dynamic_max_tokens = 200
 
