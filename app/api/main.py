@@ -16,6 +16,8 @@ from app.config import settings
 from app.api.job_service import JobService
 from app.api.pipeline_service import PipelineService
 from app.api.cartesia_service import CartesiaAPIService
+from app.phase1_pdf_processing.service import PDFExtractorService
+from app.phase2_ai_services.pdf_summarizer import generate_pdf_summary
 
 logger = logging.getLogger(__name__)
 
@@ -312,13 +314,19 @@ async def download_summary(job_id: str):
 @app.post("/api/jobs/{job_id}/generate-summary-video", response_model=JobResponse)
 async def generate_summary_video(
     job_id: str,
-    background_tasks: BackgroundTasks
+    background_tasks: BackgroundTasks,
+    voice_provider: str = Form("openai"),
+    cartesia_voice_id: Optional[str] = Form(None),
+    cartesia_model_id: Optional[str] = Form(None),
 ):
     """
     Generate a video from the summary (if summary exists).
     
     Args:
         job_id: Unique job identifier
+        voice_provider: Voice provider ("openai" or "cartesia")
+        cartesia_voice_id: Cartesia voice ID (if using Cartesia)
+        cartesia_model_id: Cartesia model ID (if using Cartesia)
         background_tasks: FastAPI background tasks
     
     Returns:
@@ -381,6 +389,291 @@ async def download_summary_video(job_id: str):
         path=str(summary_video_file),
         filename=summary_video_file.name,
         media_type="video/mp4"
+    )
+
+
+@app.post("/api/summarize-pdf", response_model=JobResponse)
+async def summarize_pdf(
+    background_tasks: BackgroundTasks,
+    file: UploadFile = File(...),
+):
+    """
+    Upload a PDF file and generate an extensive summary (minimum 10k words).
+    
+    Args:
+        file: PDF file to upload
+        background_tasks: FastAPI background tasks
+    
+    Returns:
+        JobResponse with job_id and status
+    """
+    if not file.filename.endswith('.pdf'):
+        raise HTTPException(status_code=400, detail="File must be a PDF")
+    
+    # Generate unique job ID
+    job_id = f"summary_{Path(file.filename).stem}_{datetime.now().strftime('%Y%m%d_%H%M%S')}_{uuid.uuid4().hex[:8]}"
+    job_dir = settings.JOBS_OUTPUT_PATH / job_id
+    job_dir.mkdir(parents=True, exist_ok=True)
+    
+    # Save uploaded PDF
+    pdf_path = job_dir / file.filename
+    try:
+        with open(pdf_path, "wb") as f:
+            content = await file.read()
+            f.write(content)
+        logger.info(f"PDF uploaded for summarization: {pdf_path} (size: {len(content)} bytes)")
+    except Exception as e:
+        logger.error(f"Failed to save PDF: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Failed to save PDF: {str(e)}")
+    
+    # Create job record
+    job_service.create_job(
+        job_id=job_id,
+        pdf_path=str(pdf_path),
+        generate_summary=False,
+        start_page=1,
+        end_page=1
+    )
+    
+    # Start summarization in background
+    def run_summarization():
+        """Background task to generate PDF summary."""
+        try:
+            logger.info(f"Starting PDF summarization for job {job_id}")
+            
+            # Update status
+            job_service.update_job(
+                job_id=job_id,
+                status="processing",
+                message="Extracting text from PDF...",
+                progress=10
+            )
+            
+            # Extract text from PDF
+            extractor_service = PDFExtractorService(output_dir=settings.JOBS_OUTPUT_PATH)
+            extraction_result = extractor_service.extract_from_pdf(
+                pdf_path=str(pdf_path),
+                job_id=job_id
+            )
+            
+            pdf_text = extraction_result["text_extraction"]["full_text"]
+            pdf_filename = extraction_result["pdf_filename"]
+            
+            logger.info(f"Extracted {len(pdf_text)} characters from PDF")
+            
+            # Update status
+            job_service.update_job(
+                job_id=job_id,
+                status="processing",
+                message="Generating summary with GPT-4o-mini...",
+                progress=30
+            )
+            
+            # Generate summary
+            summary_text, stats = generate_pdf_summary(
+                pdf_text=pdf_text,
+                pdf_filename=pdf_filename,
+                min_words=10000
+            )
+            
+            # Save summary to file
+            summary_path = job_dir / f"{job_id}_summary.txt"
+            with open(summary_path, 'w', encoding='utf-8') as f:
+                f.write(summary_text)
+            
+            logger.info(f"Summary generated: {stats['word_count']:,} words")
+            
+            # Update job with summary
+            job_service.update_job(
+                job_id=job_id,
+                status="completed",
+                message=f"Summary generated: {stats['word_count']:,} words (~{stats['estimated_minutes']:.1f} min narration)",
+                progress=100,
+                metadata={
+                    "summary_path": str(summary_path),
+                    "summary_stats": stats,
+                    "summary_text": summary_text,  # Include summary text in metadata
+                    "pdf_filename": pdf_filename
+                }
+            )
+            
+            logger.info(f"PDF summarization completed for job {job_id}")
+            
+        except Exception as e:
+            logger.error(f"PDF summarization failed for job {job_id}: {e}", exc_info=True)
+            job_service.update_job(
+                job_id=job_id,
+                status="failed",
+                message=f"Summarization failed: {str(e)}",
+                metadata={"error": str(e)}
+            )
+    
+    background_tasks.add_task(run_summarization)
+    
+    return JobResponse(
+        job_id=job_id,
+        status="processing",
+        message="PDF uploaded, starting summarization...",
+        created_at=datetime.now().isoformat()
+    )
+
+
+@app.post("/api/generate-video-from-text", response_model=JobResponse)
+async def generate_video_from_text(
+    background_tasks: BackgroundTasks,
+    text: str = Form(...),
+    voice_provider: str = Form("openai"),
+    cartesia_voice_id: Optional[str] = Form(None),
+    cartesia_model_id: Optional[str] = Form(None),
+):
+    """
+    Generate video from text directly (for summary text).
+    
+    Args:
+        text: Text content to generate video from
+        voice_provider: Voice provider ("openai" or "cartesia")
+        cartesia_voice_id: Cartesia voice ID (if using Cartesia)
+        cartesia_model_id: Cartesia model ID (if using Cartesia)
+        background_tasks: FastAPI background tasks
+    
+    Returns:
+        JobResponse with job_id and status
+    """
+    if not text or not text.strip():
+        raise HTTPException(status_code=400, detail="Text cannot be empty")
+    
+    # Generate unique job ID
+    job_id = f"text_video_{datetime.now().strftime('%Y%m%d_%H%M%S')}_{uuid.uuid4().hex[:8]}"
+    job_dir = settings.JOBS_OUTPUT_PATH / job_id
+    job_dir.mkdir(parents=True, exist_ok=True)
+    
+    # Save text to file
+    text_path = job_dir / f"{job_id}_input_text.txt"
+    with open(text_path, 'w', encoding='utf-8') as f:
+        f.write(text)
+    
+    logger.info(f"Text saved for video generation: {text_path} ({len(text)} characters)")
+    
+    # Create job record
+    job_service.create_job(
+        job_id=job_id,
+        pdf_path=None,  # No PDF for text-based generation
+        generate_summary=False,
+        start_page=1,
+        end_page=1
+    )
+    
+    # Start video generation in background
+    def run_text_video_pipeline():
+        """Background task to generate video from text."""
+        try:
+            logger.info(f"Starting text-to-video pipeline for job {job_id}")
+            
+            # Use pipeline service but skip PDF processing
+            pipeline_service.run_pipeline_from_text(
+                job_id=job_id,
+                text_path=text_path,
+                voice_provider=voice_provider,
+                cartesia_voice_id=cartesia_voice_id,
+                cartesia_model_id=cartesia_model_id
+            )
+            
+        except Exception as e:
+            logger.error(f"Text-to-video pipeline failed for job {job_id}: {e}", exc_info=True)
+            job_service.update_job(
+                job_id=job_id,
+                status="failed",
+                message=f"Video generation failed: {str(e)}",
+                metadata={"error": str(e)}
+            )
+    
+    background_tasks.add_task(run_text_video_pipeline)
+    
+    return JobResponse(
+        job_id=job_id,
+        status="processing",
+        message="Summary text received, starting video generation pipeline...",
+        created_at=datetime.now().isoformat()
+    )
+
+
+@app.post("/api/generate-reels-video", response_model=JobResponse)
+async def generate_reels_video(
+    background_tasks: BackgroundTasks,
+    text: str = Form(...),
+    voice_provider: str = Form("openai"),
+    cartesia_voice_id: Optional[str] = Form(None),
+    cartesia_model_id: Optional[str] = Form(None),
+):
+    """
+    Generate reels/shorts video from text directly (skips text cleaning).
+    Uses custom background image (1488x1960) and smaller font size.
+    
+    Args:
+        text: Text content to generate video from
+        voice_provider: Voice provider ("openai" or "cartesia")
+        cartesia_voice_id: Cartesia voice ID (if using Cartesia)
+        cartesia_model_id: Cartesia model ID (if using Cartesia)
+        background_tasks: FastAPI background tasks
+    
+    Returns:
+        JobResponse with job_id and status
+    """
+    if not text or not text.strip():
+        raise HTTPException(status_code=400, detail="Text cannot be empty")
+    
+    # Generate unique job ID
+    job_id = f"reels_{datetime.now().strftime('%Y%m%d_%H%M%S')}_{uuid.uuid4().hex[:8]}"
+    job_dir = settings.JOBS_OUTPUT_PATH / job_id
+    job_dir.mkdir(parents=True, exist_ok=True)
+    
+    # Save text to file
+    text_path = job_dir / f"{job_id}_input_text.txt"
+    with open(text_path, 'w', encoding='utf-8') as f:
+        f.write(text)
+    
+    logger.info(f"Text saved for reels video generation: {text_path} ({len(text)} characters)")
+    
+    # Create job record
+    job_service.create_job(
+        job_id=job_id,
+        pdf_path=None,  # No PDF for reels generation
+        generate_summary=False,
+        start_page=1,
+        end_page=1
+    )
+    
+    # Start video generation in background
+    def run_reels_video_pipeline():
+        """Background task to generate reels video from text."""
+        try:
+            logger.info(f"Starting reels video pipeline for job {job_id}")
+            
+            # Use pipeline service for reels (skips text cleaning)
+            pipeline_service.run_pipeline_for_reels(
+                job_id=job_id,
+                text_path=text_path,
+                voice_provider=voice_provider,
+                cartesia_voice_id=cartesia_voice_id,
+                cartesia_model_id=cartesia_model_id
+            )
+            
+        except Exception as e:
+            logger.error(f"Reels video pipeline failed for job {job_id}: {e}", exc_info=True)
+            job_service.update_job(
+                job_id=job_id,
+                status="failed",
+                message=f"Video generation failed: {str(e)}",
+                metadata={"error": str(e)}
+            )
+    
+    background_tasks.add_task(run_reels_video_pipeline)
+    
+    return JobResponse(
+        job_id=job_id,
+        status="processing",
+        message="Text received, starting reels/shorts video generation...",
+        created_at=datetime.now().isoformat()
     )
 
 

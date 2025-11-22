@@ -1,0 +1,52 @@
+.reels-shorts {
+  max-width: 800px;
+  margin: 0 auto;
+}
+
+.reels-textarea {
+  width: 100%;
+  padding: 1rem;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  font-family: inherit;
+  font-size: 0.95rem;
+  line-height: 1.6;
+  resize: vertical;
+  min-height: 250px;
+}
+
+.reels-textarea:focus {
+  outline: none;
+  border-color: #4a90e2;
+  box-shadow: 0 0 0 3px rgba(74, 144, 226, 0.1);
+}
+
+.text-count {
+  color: #666;
+  font-weight: normal;
+  font-size: 0.9rem;
+  margin-left: 0.5rem;
+}
+
+.help-text {
+  margin-top: 0.5rem;
+  color: #666;
+  font-size: 0.85rem;
+  font-style: italic;
+}
+
+.status-container {
+  padding: 1.5rem 0;
+  text-align: center;
+}
+
+.status-info h3 {
+  margin: 0 0 0.5rem 0;
+  color: #333;
+}
+
+.status-message {
+  color: #666;
+  margin: 0.5rem 0;
+}
+

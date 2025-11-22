@@ -78,7 +78,7 @@ export const downloadVideo = async (jobId) => {
 
 export const downloadSummary = async (jobId) => {
   const response = await api.get(`/api/jobs/${jobId}/download/summary`, {
-    responseType: 'blob',
+    responseType: 'text',
   });
   return response.data;
 };
@@ -97,6 +97,59 @@ export const downloadSummaryVideo = async (jobId) => {
 
 export const generateSummary = async (jobId) => {
   const response = await api.post(`/api/jobs/${jobId}/generate-summary`);
+  return response.data;
+};
+
+export const summarizePDF = async (file) => {
+  const formData = new FormData();
+  formData.append('file', file);
+
+  const response = await api.post('/api/summarize-pdf', formData, {
+    headers: {
+      'Content-Type': 'multipart/form-data',
+    },
+    timeout: 300000, // 5 minutes for summarization
+  });
+  return response.data;
+};
+
+export const generateVideoFromText = async (text, voiceProvider = 'openai', cartesiaVoiceId = null, cartesiaModelId = null) => {
+  const formData = new FormData();
+  formData.append('text', text);
+  formData.append('voice_provider', voiceProvider);
+  if (cartesiaVoiceId) {
+    formData.append('cartesia_voice_id', cartesiaVoiceId);
+  }
+  if (cartesiaModelId) {
+    formData.append('cartesia_model_id', cartesiaModelId);
+  }
+
+  const response = await api.post('/api/generate-video-from-text', formData, {
+    headers: {
+      'Content-Type': 'multipart/form-data',
+    },
+    timeout: 600000, // 10 minutes for video generation
+  });
+  return response.data;
+};
+
+export const generateReelsVideo = async (text, voiceProvider = 'openai', cartesiaVoiceId = null, cartesiaModelId = null) => {
+  const formData = new FormData();
+  formData.append('text', text);
+  formData.append('voice_provider', voiceProvider);
+  if (cartesiaVoiceId) {
+    formData.append('cartesia_voice_id', cartesiaVoiceId);
+  }
+  if (cartesiaModelId) {
+    formData.append('cartesia_model_id', cartesiaModelId);
+  }
+
+  const response = await api.post('/api/generate-reels-video', formData, {
+    headers: {
+      'Content-Type': 'multipart/form-data',
+    },
+    timeout: 600000, // 10 minutes for video generation
+  });
   return response.data;
 };
 

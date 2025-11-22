@@ -1,25 +1,54 @@
 import React, { useState } from 'react';
 import './App.css';
+import HomePage from './components/HomePage';
 import PDFUpload from './components/PDFUpload';
 import JobStatus from './components/JobStatus';
 import SummaryPrompt from './components/SummaryPrompt';
 import SummaryVideoPrompt from './components/SummaryVideoPrompt';
+import SummaryGeneration from './components/SummaryGeneration';
+import SummaryReview from './components/SummaryReview';
+import ReelsShorts from './components/ReelsShorts';
 
 function App() {
+  const [currentView, setCurrentView] = useState('home'); // 'home', 'generate-video', 'summary-video', 'summary-generation', 'summary-review', 'job-status'
   const [currentJobId, setCurrentJobId] = useState(null);
+  const [summaryJobId, setSummaryJobId] = useState(null);
+  const [summaryText, setSummaryText] = useState(null);
   const [showSummaryPrompt, setShowSummaryPrompt] = useState(false);
   const [showSummaryVideoPrompt, setShowSummaryVideoPrompt] = useState(false);
   const [jobStatus, setJobStatus] = useState(null);
   const [summaryPromptShown, setSummaryPromptShown] = useState(false);
   const [summaryVideoPromptShown, setSummaryVideoPromptShown] = useState(false);
 
+  const handleSelectOption = (option) => {
+    if (option === 'generate-video') {
+      setCurrentView('generate-video');
+    } else if (option === 'summary-video') {
+      setCurrentView('summary-generation');
+    } else if (option === 'reels-shorts') {
+      setCurrentView('reels-shorts');
+    }
+  };
+
   const handleUploadSuccess = (jobId) => {
     setCurrentJobId(jobId);
+    setCurrentView('job-status');
     setShowSummaryPrompt(false);
     setShowSummaryVideoPrompt(false);
     setSummaryPromptShown(false);
     setSummaryVideoPromptShown(false);
     setJobStatus(null);
+  };
+
+  const handleSummaryGenerated = (status) => {
+    setSummaryJobId(status.job_id);
+    setSummaryText(status.metadata?.summary_text || '');
+    setCurrentView('summary-review');
+  };
+
+  const handleVideoGenerated = (response) => {
+    setCurrentJobId(response.job_id);
+    setCurrentView('job-status');
   };
 
   const handleMainVideoComplete = (status) => {
@@ -34,7 +63,7 @@ function App() {
     }
   };
 
-  const handleSummaryGenerated = (status) => {
+  const handleSummaryGeneratedFromPrompt = (status) => {
     setJobStatus(status);
     // Show summary video prompt when summary is completed
     if (status?.metadata?.summary_path) {
@@ -58,9 +87,41 @@ function App() {
       </header>
 
       <main className="App-main">
-        {!currentJobId ? (
-          <PDFUpload onUploadSuccess={handleUploadSuccess} />
-        ) : (
+        {currentView === 'home' && (
+          <HomePage onSelectOption={handleSelectOption} />
+        )}
+        
+        {currentView === 'generate-video' && (
+          <PDFUpload 
+            onUploadSuccess={handleUploadSuccess}
+            onBack={() => setCurrentView('home')}
+          />
+        )}
+        
+        {currentView === 'summary-generation' && (
+          <SummaryGeneration
+            onSummaryGenerated={handleSummaryGenerated}
+            onBack={() => setCurrentView('home')}
+          />
+        )}
+        
+        {currentView === 'summary-review' && summaryText && (
+          <SummaryReview
+            summaryJobId={summaryJobId}
+            summaryText={summaryText}
+            onVideoGenerated={handleVideoGenerated}
+            onBack={() => setCurrentView('summary-generation')}
+          />
+        )}
+        
+        {currentView === 'reels-shorts' && (
+          <ReelsShorts
+            onVideoGenerated={handleVideoGenerated}
+            onBack={() => setCurrentView('home')}
+          />
+        )}
+        
+        {currentView === 'job-status' && currentJobId && (
           <>
             <JobStatus
               jobId={currentJobId}
@@ -70,7 +131,7 @@ function App() {
             {showSummaryPrompt && (
               <SummaryPrompt
                 jobId={currentJobId}
-                onSummaryGenerated={handleSummaryGenerated}
+                onSummaryGenerated={handleSummaryGeneratedFromPrompt}
                 onDismiss={() => setShowSummaryPrompt(false)}
               />
             )}
@@ -86,7 +147,10 @@ function App() {
             <button
               className="btn-secondary"
               onClick={() => {
+                setCurrentView('home');
                 setCurrentJobId(null);
+                setSummaryJobId(null);
+                setSummaryText(null);
                 setShowSummaryPrompt(false);
                 setShowSummaryVideoPrompt(false);
                 setJobStatus(null);

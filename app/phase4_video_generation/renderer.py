@@ -32,7 +32,7 @@ class FrameGeneratorV11:
     Generates TRANSPARENT frames with clean "karaoke-style" animated text.
     V11: Robust punctuation alignment, justified text alignment, proper margins and padding.
     """
-    def __init__(self, timestamps_path: Path, bg_width: int, bg_height: int):
+    def __init__(self, timestamps_path: Path, bg_width: int, bg_height: int, font_size: Optional[int] = None):
         logger.info("Initializing FrameGeneratorV11 (Robust Punctuation)...")
         
         self.bg_width = bg_width
@@ -42,7 +42,11 @@ class FrameGeneratorV11:
 
         # --- 1. Load settings from config.py ---
         # Reduced font size to ensure max 5 lines per slide fit properly
-        self.font_size = max(32, int(self.bg_height / 7))  # Smaller font to fit 5 lines per slide
+        # Allow custom font_size for reels/shorts (smaller text)
+        if font_size is not None:
+            self.font_size = font_size
+        else:
+            self.font_size = max(32, int(self.bg_height / 7))  # Smaller font to fit 5 lines per slide
         self.line_height = int(self.font_size * 1.2)  # Slightly more line spacing
         self.regular_font, self.bold_font = self._load_fonts(self.font_size)
         # Fixed margins - these should NEVER change during rendering
@@ -1247,7 +1251,11 @@ def _encode_video_with_ffmpeg(
 def render_video(
     audio_path: Path,
     timestamps_path: Path,
-    output_path: Path
+    output_path: Path,
+    background_path: Optional[Path] = None,
+    width: Optional[int] = None,
+    height: Optional[int] = None,
+    font_size: Optional[int] = None
 ) -> Path:
     """
     Renders the final karaoke-style video using batch processing for faster rendering.
@@ -1256,6 +1264,10 @@ def render_video(
         audio_path: Path to the PROCESSED audio file.
         timestamps_path: Path to the timestamps.json file.
         output_path: Path to save the final .mp4 video.
+        background_path: Optional custom background image path (for reels/shorts).
+        width: Optional custom video width (for reels/shorts).
+        height: Optional custom video height (for reels/shorts).
+        font_size: Optional custom font size (for reels/shorts - smaller text).
 
     Returns:
         The path to the rendered video.
@@ -1263,26 +1275,47 @@ def render_video(
     logger.info("--- Starting Video Rendering Pipeline (Batch Processing) ---")
     
     temp_frames_dir = None
+    temp_bg_path = None
     
     try:
         logger.info(f"Loading audio: {audio_path}")
         audio_clip = AudioFileClip(str(audio_path))
         audio_duration = audio_clip.duration
         
-        # --- Load background/config from settings ---
-        background_path = settings.DEFAULT_BACKGROUND
-        fps = settings.VIDEO_FPS
-        width = settings.VIDEO_WIDTH
-        height = settings.VIDEO_HEIGHT
+        # --- Load background/config from settings or use custom values ---
+        if background_path is None:
+            background_path = Path(settings.DEFAULT_BACKGROUND)
+        else:
+            background_path = Path(background_path)
         
-        logger.info(f"Loading background: {background_path}")
-        bg_clip = ImageClip(background_path).with_duration(audio_duration)
+        if width is None:
+            width = settings.VIDEO_WIDTH
+        if height is None:
+            height = settings.VIDEO_HEIGHT
+        
+        fps = settings.VIDEO_FPS
+        
+        logger.info(f"Loading background: {background_path} (dimensions: {width}x{height})")
+        
+        # Load and resize background image using PIL if dimensions don't match
+        bg_image = Image.open(str(background_path))
+        if bg_image.size != (width, height):
+            logger.info(f"Resizing background from {bg_image.size} to ({width}, {height})")
+            bg_image = bg_image.resize((width, height), Image.Resampling.LANCZOS)
+            # Save resized image to temporary file
+            temp_bg_path = output_path.parent / f"temp_bg_{output_path.stem}.jpg"
+            bg_image.save(temp_bg_path, "JPEG", quality=95)
+            bg_clip = ImageClip(str(temp_bg_path)).with_duration(audio_duration)
+        else:
+            # Use original image if dimensions match
+            bg_clip = ImageClip(str(background_path)).with_duration(audio_duration)
 
-        # Initialize frame generator
+        # Initialize frame generator with optional custom font size
         frame_gen = FrameGeneratorV11(
             timestamps_path=timestamps_path,
             bg_width=width,
-            bg_height=height
+            bg_height=height,
+            font_size=font_size
         )
 
         # ====================================================================
@@ -1435,3 +1468,11 @@ def render_video(
                 logger.info("Temporary files cleaned up successfully")
             except Exception as e:
                 logger.warning(f"Failed to clean up temporary files: {e}")
+        
+        # Cleanup temporary background file if created
+        if temp_bg_path and temp_bg_path.exists():
+            try:
+                temp_bg_path.unlink()
+                logger.info(f"Cleaned up temporary background file: {temp_bg_path}")
+            except Exception as e:
+                logger.warning(f"Failed to cleanup temp background file: {e}")

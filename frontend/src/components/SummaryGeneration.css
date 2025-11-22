@@ -1,0 +1,82 @@
+.summary-generation {
+  max-width: 600px;
+  margin: 0 auto;
+}
+
+.card-header {
+  margin-bottom: 1.5rem;
+}
+
+.card-header h2 {
+  margin: 0 0 0.5rem 0;
+}
+
+.subtitle {
+  color: #666;
+  margin: 0;
+  font-size: 0.9rem;
+}
+
+.button-group {
+  display: flex;
+  gap: 1rem;
+  margin-top: 1.5rem;
+}
+
+.button-group .btn {
+  flex: 1;
+}
+
+.status-container {
+  padding: 1.5rem 0;
+}
+
+.status-info h3 {
+  margin: 0 0 0.5rem 0;
+  color: #333;
+}
+
+.status-message {
+  color: #666;
+  margin: 0.5rem 0 1rem 0;
+}
+
+.progress-bar-container {
+  position: relative;
+  width: 100%;
+  height: 30px;
+  background-color: #e0e0e0;
+  border-radius: 15px;
+  overflow: hidden;
+  margin: 1rem 0;
+}
+
+.progress-bar {
+  height: 100%;
+  background: linear-gradient(90deg, #4a90e2, #357abd);
+  transition: width 0.3s ease;
+  border-radius: 15px;
+}
+
+.progress-text {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  font-weight: bold;
+  color: #333;
+  font-size: 0.9rem;
+}
+
+.summary-stats {
+  margin-top: 1.5rem;
+  padding: 1rem;
+  background-color: #f5f5f5;
+  border-radius: 8px;
+}
+
+.summary-stats p {
+  margin: 0.5rem 0;
+  color: #333;
+}
+

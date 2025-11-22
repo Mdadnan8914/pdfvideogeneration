@@ -3,7 +3,7 @@ import { uploadPDF } from '../services/api';
 import CartesiaConfig from './CartesiaConfig';
 import './PDFUpload.css';
 
-const PDFUpload = ({ onUploadSuccess }) => {
+const PDFUpload = ({ onUploadSuccess, onBack }) => {
   const [file, setFile] = useState(null);
   const [startPage, setStartPage] = useState(50);
   const [endPage, setEndPage] = useState(50);
@@ -173,13 +173,26 @@ const PDFUpload = ({ onUploadSuccess }) => {
           </div>
         )}
 
-        <button
-          type="submit"
-          className="btn"
-          disabled={isUploading || !file}
-        >
-          {isUploading ? 'Uploading...' : 'Start Video Generation'}
-        </button>
+        <div className="button-group">
+          {onBack && (
+            <button
+              type="button"
+              className="btn btn-secondary"
+              onClick={onBack}
+              disabled={isUploading}
+            >
+              Back
+            </button>
+          )}
+          <button
+            type="submit"
+            className="btn"
+            disabled={isUploading || !file}
+            style={onBack ? { flex: 1 } : {}}
+          >
+            {isUploading ? 'Uploading...' : 'Start Video Generation'}
+          </button>
+        </div>
       </form>
     </div>
   );
