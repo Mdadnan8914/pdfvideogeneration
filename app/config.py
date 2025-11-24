@@ -44,6 +44,12 @@ class Settings(BaseSettings):
     OPENAI_API_KEY: str = os.getenv('OPENAI_API_KEY', "sk-...")  # Default,
     CARTESIA_API_KEY: str = os.getenv('CARTESIA_API_KEY', "")  # Optional, for Cartesia TTS
     SERPER_API_KEY: str = os.getenv('SERPER_API_KEY', "")  # Optional, for genre detection
+
+    #AWS credientials
+    AWS_ACCESS_KEY_ID: str = os.getenv('AWS_ACCESS_KEY_ID', "")
+    AWS_SECRET_ACCESS_KEY: str = os.getenv('AWS_SECRET_ACCESS_KEY', "")
+    AWS_BUCKET_NAME: str = os.getenv('AWS_BUCKET_NAME', "")
+    AWS_REGION: str = os.getenv('AWS_REGION', "us-east-1")
     
     # --- Video & Text Settings (from your files) ---
     DEFAULT_FONT_REGULAR: str = str(FONTS_PATH / "Book Antiqua.ttf")

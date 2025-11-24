@@ -1,0 +1,44 @@
+version: '3.8'
+
+services:
+  # 1. REDIS (The Message Queue)
+  redis:
+    image: redis:7-alpine
+    container_name: pdf_video_redis
+    ports:
+      - "6379:6379"
+
+  # 2. API (The Receptionist - FastAPI)
+  api:
+    build: .
+    container_name: pdf_video_api
+    command: python run_backend.py
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./jobs:/app/jobs            # Sync jobs folder to host
+      - ./assets:/app/assets        # Sync assets folder to host
+      - ./.env:/app/.env            # Load .env file
+    environment:
+      - REDIS_URL=redis://redis:6379/0
+      - JOBS_OUTPUT_PATH=/app/jobs
+    depends_on:
+      - redis
+
+  # 3. WORKER (The Chef - Celery)
+  worker:
+    build: .
+    container_name: pdf_video_worker
+    # Starts Celery instead of FastAPI
+    command: celery -A app.celery_app worker --loglevel=info --pool=solo
+    volumes:
+      - ./jobs:/app/jobs            # MUST match API volume to see files
+      - ./assets:/app/assets        # MUST match API volume to see fonts/bg
+      - ./.env:/app/.env            # Load .env file
+    environment:
+      - REDIS_URL=redis://redis:6379/0
+      - JOBS_OUTPUT_PATH=/app/jobs
+      # Fix for ImageMagick/MoviePy
+      - IMAGEMAGICK_BINARY=/usr/bin/convert
+    depends_on:
+      - redis

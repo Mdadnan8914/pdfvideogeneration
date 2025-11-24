@@ -1,0 +1,48 @@
+Attaching to pdf_video_redis, pdf_video_worker, pdf_video_api
+[33mpdf_video_redis |[0m 1:C 24 Nov 2025 12:32:51.468 # WARNING Memory overcommit must be enabled! Without it, a background save or replication may fail under low memory condition. Being disabled, it can also cause failures without low memory condition, see https://github.com/jemalloc/jemalloc/issues/1328. To fix this issue add 'vm.overcommit_memory = 1' to /etc/sysctl.conf and then reboot or run the command 'sysctl vm.overcommit_memory=1' for this to take effect.
+[33mpdf_video_redis |[0m 1:C 24 Nov 2025 12:32:51.468 * oO0OoO0OoO0Oo Redis is starting oO0OoO0OoO0Oo
+[33mpdf_video_redis |[0m 1:C 24 Nov 2025 12:32:51.468 * Redis version=7.4.7, bits=64, commit=00000000, modified=0, pid=1, just started
+[33mpdf_video_redis |[0m 1:C 24 Nov 2025 12:32:51.468 # Warning: no config file specified, using the default config. In order to specify a config file use redis-server /path/to/redis.conf
+[33mpdf_video_redis |[0m 1:M 24 Nov 2025 12:32:51.469 * monotonic clock: POSIX clock_gettime
+[33mpdf_video_redis |[0m 1:M 24 Nov 2025 12:32:51.470 * Running mode=standalone, port=6379.
+[33mpdf_video_redis |[0m 1:M 24 Nov 2025 12:32:51.470 * Server initialized
+[33mpdf_video_redis |[0m 1:M 24 Nov 2025 12:32:51.470 * Ready to accept connections tcp
+[36mpdf_video_api |[0m INFO:     Will watch for changes in these directories: ['/app']
+[36mpdf_video_api |[0m INFO:     Uvicorn running on http://0.0.0.0:8000 (Press CTRL+C to quit)
+[36mpdf_video_api |[0m INFO:     Started reloader process [1] using WatchFiles
+[32mpdf_video_worker |[0m /usr/local/lib/python3.11/site-packages/celery/platforms.py:841: SecurityWarning: You're running the worker with superuser privileges: this is
+[32mpdf_video_worker |[0m absolutely not recommended!
+[32mpdf_video_worker |[0m 
+[32mpdf_video_worker |[0m Please specify a different user using the --uid option.
+[32mpdf_video_worker |[0m 
+[32mpdf_video_worker |[0m User information: uid=0 euid=0 gid=0 egid=0
+[32mpdf_video_worker |[0m 
+[32mpdf_video_worker |[0m   warnings.warn(SecurityWarning(ROOT_DISCOURAGED.format(
+[32mpdf_video_worker |[0m  
+[32mpdf_video_worker |[0m  -------------- celery@b9320a46255c v5.5.3 (immunity)
+[32mpdf_video_worker |[0m --- ***** ----- 
+[32mpdf_video_worker |[0m -- ******* ---- Linux-6.14.0-35-generic-x86_64-with-glibc2.41 2025-11-24 12:32:51
+[32mpdf_video_worker |[0m - *** --- * --- 
+[32mpdf_video_worker |[0m - ** ---------- [config]
+[32mpdf_video_worker |[0m - ** ---------- .> app:         pdf_video_worker:0x7101fe744cd0
+[32mpdf_video_worker |[0m - ** ---------- .> transport:   redis://redis:6379/0
+[32mpdf_video_worker |[0m - ** ---------- .> results:     redis://redis:6379/0
+[32mpdf_video_worker |[0m - *** --- * --- .> concurrency: 1 (prefork)
+[32mpdf_video_worker |[0m -- ******* ---- .> task events: OFF (enable -E to monitor tasks in this worker)
+[32mpdf_video_worker |[0m --- ***** ----- 
+[32mpdf_video_worker |[0m  -------------- [queues]
+[32mpdf_video_worker |[0m                 .> celery           exchange=celery(direct) key=celery
+[32mpdf_video_worker |[0m                 
+[32mpdf_video_worker |[0m 
+[32mpdf_video_worker |[0m [tasks]
+[32mpdf_video_worker |[0m 
+[32mpdf_video_worker |[0m 
+[32mpdf_video_worker |[0m [2025-11-24 12:32:52,045: INFO/MainProcess] Connected to redis://redis:6379/0
+[32mpdf_video_worker |[0m [2025-11-24 12:32:52,047: INFO/MainProcess] mingle: searching for neighbors
+[32mpdf_video_worker |[0m [2025-11-24 12:32:53,053: INFO/MainProcess] mingle: all alone
+[32mpdf_video_worker |[0m [2025-11-24 12:32:53,061: INFO/MainProcess] celery@b9320a46255c ready.
+[36mpdf_video_api |[0m Cartesia API service not available (API key not configured)
+[36mpdf_video_api |[0m INFO:     Started server process [8]
+[36mpdf_video_api |[0m INFO:     Waiting for application startup.
+[36mpdf_video_api |[0m INFO:     Application startup complete.
+Gracefully stopping... (press Ctrl+C again to force)

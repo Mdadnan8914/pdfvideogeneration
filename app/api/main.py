@@ -18,6 +18,11 @@ from app.api.pipeline_service import PipelineService
 from app.api.cartesia_service import CartesiaAPIService
 from app.phase1_pdf_processing.service import PDFExtractorService
 from app.phase2_ai_services.pdf_summarizer import generate_pdf_summary
+from app.tasks import (
+    process_pdf_job_task, 
+    generate_video_from_text_task, 
+    generate_reels_video_task
+)
 
 logger = logging.getLogger(__name__)
 
@@ -139,41 +144,21 @@ async def upload_pdf(
     # Start pipeline in background
     logger.info(f"Starting background pipeline for job {job_id}")
     
-    def run_pipeline_wrapper():
-        """Wrapper to ensure pipeline runs and logs properly."""
-        try:
-            logger.info(f"Background task started for job {job_id}")
-            pipeline_service.run_pipeline(
-                job_id=job_id,
-                pdf_path=pdf_path,
-                generate_summary=generate_summary,
-                start_page=start_page or 50,
-                end_page=end_page or 50,
-                voice_provider=voice_provider,
-                cartesia_voice_id=cartesia_voice_id,
-                cartesia_model_id=cartesia_model_id
-            )
-            logger.info(f"Background task completed for job {job_id}")
-        except Exception as e:
-            logger.error(f"Background task failed for job {job_id}: {e}", exc_info=True)
-            # Try to update job status even if pipeline failed
-            try:
-                job_service.update_job(
-                    job_id=job_id,
-                    status="failed",
-                    message=f"Pipeline failed: {str(e)}",
-                    metadata={"error": str(e)}
-                )
-            except:
-                pass
-    
-    background_tasks.add_task(run_pipeline_wrapper)
-    logger.info(f"Background task added for job {job_id}")
-    
+    process_pdf_job_task.delay(
+        job_id=job_id,
+        pdf_path_str=str(pdf_path),
+        generate_summary=generate_summary,
+        start_page=start_page or 50,
+        end_page=end_page or 50,
+        voice_provider=voice_provider,
+        cartesia_voice_id=cartesia_voice_id,
+        cartesia_model_id=cartesia_model_id
+    )
+
     return JobResponse(
         job_id=job_id,
-        status="processing",
-        message="PDF uploaded and pipeline started",
+        status="queued", # Status is now queued initially
+        message="PDF uploaded and job queued",
         created_at=datetime.now().isoformat()
     )
 
@@ -564,35 +549,20 @@ async def generate_video_from_text(
     )
     
     # Start video generation in background
-    def run_text_video_pipeline():
-        """Background task to generate video from text."""
-        try:
-            logger.info(f"Starting text-to-video pipeline for job {job_id}")
-            
-            # Use pipeline service but skip PDF processing
-            pipeline_service.run_pipeline_from_text(
-                job_id=job_id,
-                text_path=text_path,
-                voice_provider=voice_provider,
-                cartesia_voice_id=cartesia_voice_id,
-                cartesia_model_id=cartesia_model_id
-            )
-            
-        except Exception as e:
-            logger.error(f"Text-to-video pipeline failed for job {job_id}: {e}", exc_info=True)
-            job_service.update_job(
-                job_id=job_id,
-                status="failed",
-                message=f"Video generation failed: {str(e)}",
-                metadata={"error": str(e)}
-            )
+    logger.info(f"Queuing text-to-video job {job_id}")
     
-    background_tasks.add_task(run_text_video_pipeline)
+    generate_video_from_text_task.delay(
+        job_id=job_id,
+        text_path_str=str(text_path), # Convert Path to string
+        voice_provider=voice_provider,
+        cartesia_voice_id=cartesia_voice_id,
+        cartesia_model_id=cartesia_model_id
+    )
     
     return JobResponse(
         job_id=job_id,
-        status="processing",
-        message="Summary text received, starting video generation pipeline...",
+        status="queued", # Status changed to queued
+        message="Summary text received, job queued for processing",
         created_at=datetime.now().isoformat()
     )
 
@@ -643,36 +613,20 @@ async def generate_reels_video(
         end_page=1
     )
     
-    # Start video generation in background
-    def run_reels_video_pipeline():
-        """Background task to generate reels video from text."""
-        try:
-            logger.info(f"Starting reels video pipeline for job {job_id}")
-            
-            # Use pipeline service for reels (skips text cleaning)
-            pipeline_service.run_pipeline_for_reels(
-                job_id=job_id,
-                text_path=text_path,
-                voice_provider=voice_provider,
-                cartesia_voice_id=cartesia_voice_id,
-                cartesia_model_id=cartesia_model_id
-            )
-            
-        except Exception as e:
-            logger.error(f"Reels video pipeline failed for job {job_id}: {e}", exc_info=True)
-            job_service.update_job(
-                job_id=job_id,
-                status="failed",
-                message=f"Video generation failed: {str(e)}",
-                metadata={"error": str(e)}
-            )
+    logger.info(f"Queuing reels job {job_id}")
     
-    background_tasks.add_task(run_reels_video_pipeline)
+    generate_reels_video_task.delay(
+        job_id=job_id,
+        text_path_str=str(text_path), # Convert Path to string
+        voice_provider=voice_provider,
+        cartesia_voice_id=cartesia_voice_id,
+        cartesia_model_id=cartesia_model_id
+    )
     
     return JobResponse(
         job_id=job_id,
-        status="processing",
-        message="Text received, starting reels/shorts video generation...",
+        status="queued", # Status changed to queued
+        message="Text received, reels job queued",
         created_at=datetime.now().isoformat()
     )
 
