@@ -53,17 +53,17 @@ class FrameGeneratorV11:
                 # 1. Big Margins (Top/Bottom) to avoid TikTok/Reels UI overlay
                 self.margin_x = int(self.bg_width * 0.12)
                 self.margin_y = int(self.bg_height * 0.30)  # 30% down to be safe
-                # 2. HUGE Text (Calculated based on WIDTH, not height)
-                self.font_size = int(self.bg_width / 8)
-                # 3. Constraint: Only 1 or 2 lines per slide max
+                # 2. Text size (Calculated based on WIDTH, not height) - slightly smaller for reels
+                self.font_size = int(self.bg_width / 9)  # Slightly smaller than before (was /8)
+                # 3. Constraint: Only 2 lines per slide max for reels
                 self.max_lines = 2
                 # Use margin_x for both left and right in reels mode
                 self.left_margin = self.margin_x
                 self.right_margin = self.margin_x
                 self.top_margin = self.margin_y
                 self.bottom_margin = self.margin_y
-                # 4. Center alignment for reels
-                self.text_align = "center"
+                # 4. Left alignment for reels
+                self.text_align = "left"
             else:
                 # Horizontal reels (shouldn't happen, but fallback)
                 logger.info("Reels mode but horizontal video - using standard settings")
@@ -398,7 +398,8 @@ class FrameGeneratorV11:
         space_bbox = draw.textbbox((0, 0), " ", font=self.bold_font); space_width = space_bbox[2] - space_bbox[0]
 
         MAX_WORDS_PER_SLIDE = 12  # Maximum 12 words per slide
-        MAX_LINES_PER_SLIDE = 4  # Fixed: Maximum 3 lines per slide (always 3, no dynamic)
+        # Use self.max_lines if set (for reels: 2 lines), otherwise default to 4 for main videos
+        MAX_LINES_PER_SLIDE = self.max_lines if self.max_lines is not None else 4
         
         logger.info(f"Slide constraints: Maximum {MAX_LINES_PER_SLIDE} lines and {MAX_WORDS_PER_SLIDE} words per slide")
 
@@ -425,8 +426,8 @@ class FrameGeneratorV11:
             # The word.word from timestamps already contains proper punctuation
 
             current_slide_lines, current_line = [], []
-            # CRITICAL: Always use MAX_LINES_PER_SLIDE (fixed at 3) - do not calculate dynamically
-            max_lines_that_fit = MAX_LINES_PER_SLIDE  # Fixed: Always 3 lines maximum
+            # CRITICAL: Use MAX_LINES_PER_SLIDE (2 for reels, 4 for main videos)
+            max_lines_that_fit = MAX_LINES_PER_SLIDE
             
             processed_words = []
             remaining_words = []
@@ -2367,38 +2368,80 @@ def render_video(
         audio_clip = AudioFileClip(str(audio_path))
         audio_duration = audio_clip.duration
         
-        # --- Load background/config from settings or use custom values ---
-        if background_path is None:
-            background_path = Path(settings.DEFAULT_BACKGROUND)
-        else:
-            background_path = Path(background_path)
-        
         fps = settings.VIDEO_FPS
         
-        # Load background image FIRST to get actual dimensions (source of truth for reels)
-        bg_image = Image.open(str(background_path))
-        actual_width, actual_height = bg_image.size
-        
-        # Use provided dimensions or actual image dimensions
-        if width is None:
-            width = actual_width
-        if height is None:
-            height = actual_height
-        
-        logger.info(f"Loading background: {background_path}")
-        logger.info(f"Background image dimensions: {actual_width}x{actual_height}")
-        logger.info(f"Using video dimensions: {width}x{height}")
-        
-        # Resize background image if dimensions don't match
-        if bg_image.size != (width, height):
-            logger.info(f"Resizing background from {bg_image.size} to ({width}, {height})")
-            bg_image = bg_image.resize((width, height), Image.Resampling.LANCZOS)
-
-        # Detect if this is for reels (check if background_path was provided and dimensions are vertical)
-        is_reels = background_path is not None and background_path != Path(settings.DEFAULT_BACKGROUND)
-        if is_reels:
-            # Double-check: if height > width, it's definitely reels
+        # --- Load or generate background ---
+        if background_path is None:
+            # No background provided
+            if width is not None and height is not None:
+                # Dimensions explicitly provided - check if reels (9:16, typically 1080x1920)
+                is_reels = (width == 1080 and height == 1920) or (height > width)
+                
+                if is_reels:
+                    # Generate solid white background programmatically for reels
+                    logger.info(f"Generating solid white background for reels: {width}x{height}")
+                    bg_image = Image.new('RGB', (width, height), (255, 255, 255))  # Solid white
+                    logger.info(f"Created white background programmatically: {width}x{height}")
+                else:
+                    # Main video - use default background
+                    background_path = Path(settings.DEFAULT_BACKGROUND)
+                    logger.info(f"Using default background: {background_path}")
+                    bg_image = Image.open(str(background_path))
+                    actual_width, actual_height = bg_image.size
+                    
+                    # Use provided dimensions or actual image dimensions
+                    if width is None:
+                        width = actual_width
+                    if height is None:
+                        height = actual_height
+                    
+                    logger.info(f"Background image dimensions: {actual_width}x{actual_height}")
+                    
+                    # Resize background image if dimensions don't match
+                    if bg_image.size != (width, height):
+                        logger.info(f"Resizing background from {bg_image.size} to ({width}, {height})")
+                        bg_image = bg_image.resize((width, height), Image.Resampling.LANCZOS)
+                    
+                    # Update reels detection based on final dimensions
+                    is_reels = height > width
+            else:
+                # No dimensions provided - use default background and get dimensions from it
+                background_path = Path(settings.DEFAULT_BACKGROUND)
+                logger.info(f"Using default background: {background_path}")
+                bg_image = Image.open(str(background_path))
+                actual_width, actual_height = bg_image.size
+                
+                # Use actual image dimensions
+                width = actual_width
+                height = actual_height
+                
+                logger.info(f"Background image dimensions: {actual_width}x{actual_height}")
+                is_reels = height > width
+        else:
+            # Custom background provided - load from file
+            background_path = Path(background_path)
+            logger.info(f"Loading custom background: {background_path}")
+            bg_image = Image.open(str(background_path))
+            actual_width, actual_height = bg_image.size
+            
+            # Use provided dimensions or actual image dimensions
+            if width is None:
+                width = actual_width
+            if height is None:
+                height = actual_height
+            
+            logger.info(f"Background image dimensions: {actual_width}x{actual_height}")
+            logger.info(f"Using video dimensions: {width}x{height}")
+            
+            # Resize background image if dimensions don't match
+            if bg_image.size != (width, height):
+                logger.info(f"Resizing background from {bg_image.size} to ({width}, {height})")
+                bg_image = bg_image.resize((width, height), Image.Resampling.LANCZOS)
+            
+            # Detect reels based on final dimensions
             is_reels = height > width
+        
+        logger.info(f"Final video dimensions: {width}x{height}, is_reels={is_reels}")
         
         # Initialize frame generator with optional custom font size and reels mode
         frame_gen = FrameGeneratorV11(

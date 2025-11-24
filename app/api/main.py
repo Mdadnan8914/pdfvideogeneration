@@ -89,6 +89,7 @@ async def upload_pdf(
     start_page: Optional[int] = Form(None),
     end_page: Optional[int] = Form(None),
     voice_provider: str = Form("openai"),
+    openai_voice: Optional[str] = Form(None),
     cartesia_voice_id: Optional[str] = Form(None),
     cartesia_model_id: Optional[str] = Form(None),
 ):
@@ -113,8 +114,12 @@ async def upload_pdf(
     job_dir = settings.JOBS_OUTPUT_PATH / job_id
     job_dir.mkdir(parents=True, exist_ok=True)
     
+    # Validate OpenAI voice selection
+    if voice_provider.lower() == "openai" and not openai_voice:
+        raise HTTPException(status_code=400, detail="Please select an OpenAI voice")
+    
     # Log received parameters
-    logger.info(f"Upload parameters - generate_summary: {generate_summary}, start_page: {start_page}, end_page: {end_page}, voice_provider: {voice_provider}, cartesia_voice_id: {cartesia_voice_id}, cartesia_model_id: {cartesia_model_id}")
+    logger.info(f"Upload parameters - generate_summary: {generate_summary}, start_page: {start_page}, end_page: {end_page}, voice_provider: {voice_provider}, openai_voice: {openai_voice}, cartesia_voice_id: {cartesia_voice_id}, cartesia_model_id: {cartesia_model_id}")
     
     # Save uploaded PDF
     pdf_path = job_dir / file.filename
@@ -150,6 +155,7 @@ async def upload_pdf(
                 start_page=start_page or 50,
                 end_page=end_page or 50,
                 voice_provider=voice_provider,
+                openai_voice=openai_voice,
                 cartesia_voice_id=cartesia_voice_id,
                 cartesia_model_id=cartesia_model_id
             )
@@ -316,6 +322,7 @@ async def generate_summary_video(
     job_id: str,
     background_tasks: BackgroundTasks,
     voice_provider: str = Form("openai"),
+    openai_voice: Optional[str] = Form(None),
     cartesia_voice_id: Optional[str] = Form(None),
     cartesia_model_id: Optional[str] = Form(None),
 ):
@@ -344,11 +351,16 @@ async def generate_summary_video(
     if not summary_file.exists():
         raise HTTPException(status_code=404, detail="Summary file not found")
     
+    # Validate OpenAI voice selection
+    if voice_provider.lower() == "openai" and not openai_voice:
+        raise HTTPException(status_code=400, detail="Please select an OpenAI voice")
+    
     # Start summary video generation in background
     background_tasks.add_task(
         pipeline_service.generate_summary_video,
         job_id=job_id,
         voice_provider=voice_provider,
+        openai_voice=openai_voice,
         cartesia_voice_id=cartesia_voice_id,
         cartesia_model_id=cartesia_model_id
     )
@@ -523,6 +535,7 @@ async def generate_video_from_text(
     background_tasks: BackgroundTasks,
     text: str = Form(...),
     voice_provider: str = Form("openai"),
+    openai_voice: Optional[str] = Form(None),
     cartesia_voice_id: Optional[str] = Form(None),
     cartesia_model_id: Optional[str] = Form(None),
 ):
@@ -541,6 +554,10 @@ async def generate_video_from_text(
     """
     if not text or not text.strip():
         raise HTTPException(status_code=400, detail="Text cannot be empty")
+    
+    # Validate OpenAI voice selection
+    if voice_provider.lower() == "openai" and not openai_voice:
+        raise HTTPException(status_code=400, detail="Please select an OpenAI voice")
     
     # Generate unique job ID
     job_id = f"text_video_{datetime.now().strftime('%Y%m%d_%H%M%S')}_{uuid.uuid4().hex[:8]}"
@@ -574,6 +591,7 @@ async def generate_video_from_text(
                 job_id=job_id,
                 text_path=text_path,
                 voice_provider=voice_provider,
+                openai_voice=openai_voice,
                 cartesia_voice_id=cartesia_voice_id,
                 cartesia_model_id=cartesia_model_id
             )
@@ -602,6 +620,7 @@ async def generate_reels_video(
     background_tasks: BackgroundTasks,
     text: str = Form(...),
     voice_provider: str = Form("openai"),
+    openai_voice: Optional[str] = Form(None),
     cartesia_voice_id: Optional[str] = Form(None),
     cartesia_model_id: Optional[str] = Form(None),
 ):
@@ -621,6 +640,10 @@ async def generate_reels_video(
     """
     if not text or not text.strip():
         raise HTTPException(status_code=400, detail="Text cannot be empty")
+    
+    # Validate OpenAI voice selection
+    if voice_provider.lower() == "openai" and not openai_voice:
+        raise HTTPException(status_code=400, detail="Please select an OpenAI voice")
     
     # Generate unique job ID
     job_id = f"reels_{datetime.now().strftime('%Y%m%d_%H%M%S')}_{uuid.uuid4().hex[:8]}"
@@ -654,6 +677,7 @@ async def generate_reels_video(
                 job_id=job_id,
                 text_path=text_path,
                 voice_provider=voice_provider,
+                openai_voice=openai_voice,
                 cartesia_voice_id=cartesia_voice_id,
                 cartesia_model_id=cartesia_model_id
             )

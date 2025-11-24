@@ -432,7 +432,7 @@ Genre-Specific Style (Horror):
 class OpenAIService:
     """Service for OpenAI API integration (TTS + Whisper STT)."""
 
-    def __init__(self, voice: str = "onyx", max_tokens_per_chunk: int = 900):
+    def __init__(self, voice: str, max_tokens_per_chunk: int = 900):
         
         api_key = settings.OPENAI_API_KEY 
         
