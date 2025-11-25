@@ -94,22 +94,61 @@ export default async function handler(req, res) {
       console.log(`[Proxy] Content-Type: ${contentType}`);
       
       if (contentType.includes('multipart/form-data')) {
-        // For multipart/form-data, Vercel doesn't parse it automatically
-        // We need to get the raw body stream
-        // Try to get raw body if available, otherwise use parsed body
-        if (req.body && Buffer.isBuffer(req.body)) {
-          // Raw buffer - pass through with original Content-Type (includes boundary)
+        // For multipart/form-data, we need to preserve the raw body
+        // Vercel serverless functions may parse it, but we need the raw stream
+        // The body should be available as a buffer or stream
+        console.log('[Proxy] Handling multipart/form-data');
+        console.log('[Proxy] Body is buffer:', Buffer.isBuffer(req.body));
+        console.log('[Proxy] Body type:', typeof req.body);
+        console.log('[Proxy] Body constructor:', req.body?.constructor?.name);
+        
+        // Try to get raw body - Vercel might provide it as a buffer
+        if (Buffer.isBuffer(req.body)) {
+          // Perfect - we have a raw buffer, pass it through
+          fetchOptions.body = req.body;
+          fetchOptions.headers['Content-Type'] = contentType; // Preserve boundary
+        } else if (req.body && typeof req.body === 'object' && req.body.pipe) {
+          // It's a stream - we'd need to buffer it, but for now try to pass
           fetchOptions.body = req.body;
           fetchOptions.headers['Content-Type'] = contentType;
         } else {
-          // If body was parsed or is an object, we need to reconstruct FormData
-          // This shouldn't happen for multipart, but handle it just in case
-          console.log('[Proxy] Multipart body is not a buffer, attempting to reconstruct...');
+          // Body was parsed - this is problematic for multipart
+          // We need to reconstruct it using form-data
+          console.log('[Proxy] WARNING: Multipart body was parsed, attempting reconstruction');
           console.log('[Proxy] Body keys:', req.body ? Object.keys(req.body) : 'null');
           
-          // For now, try to pass as-is - might work if Vercel handles it
-          fetchOptions.body = req.body;
-          fetchOptions.headers['Content-Type'] = contentType;
+          // Try to reconstruct using form-data library
+          try {
+            const FormData = require('form-data');
+            const formData = new FormData();
+            
+            // Reconstruct form fields
+            for (const [key, value] of Object.entries(req.body || {})) {
+              if (value && typeof value === 'object') {
+                // File field
+                if (value.data) {
+                  formData.append(key, Buffer.from(value.data), {
+                    filename: value.filename || key,
+                    contentType: value.contentType || 'application/octet-stream'
+                  });
+                } else {
+                  formData.append(key, JSON.stringify(value));
+                }
+              } else {
+                formData.append(key, value);
+              }
+            }
+            
+            // Use form-data's headers (includes boundary)
+            delete fetchOptions.headers['content-type'];
+            fetchOptions.body = formData;
+            Object.assign(fetchOptions.headers, formData.getHeaders());
+          } catch (error) {
+            console.error('[Proxy] Error reconstructing FormData:', error);
+            // Fallback: try to pass as-is
+            fetchOptions.body = req.body;
+            fetchOptions.headers['Content-Type'] = contentType;
+          }
         }
       } else if (contentType.includes('application/json')) {
         fetchOptions.body = JSON.stringify(req.body);
