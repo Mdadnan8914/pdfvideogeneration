@@ -104,47 +104,49 @@ export const uploadPDF = async (file, startPage, endPage, generateSummary = fals
   }
 
   // Don't set Content-Type - axios will set it automatically with boundary for FormData
-  const response = await api.post('/api/upload', formData, {
+  // baseURL is already '/api', so just use '/upload' not '/api/upload'
+  const response = await api.post('/upload', formData, {
     timeout: 60000, // 60 seconds for file upload
   });
   return response.data;
 };
 
 export const getJobStatus = async (jobId) => {
-  const response = await api.get(`/api/jobs/${jobId}`, {
+  // baseURL is already '/api', so just use '/jobs/...' not '/api/jobs/...'
+  const response = await api.get(`/jobs/${jobId}`, {
     timeout: 5000, // 5 seconds for status checks (should be fast)
   });
   return response.data;
 };
 
 export const downloadVideo = async (jobId) => {
-  const response = await api.get(`/api/jobs/${jobId}/download/video`, {
+  const response = await api.get(`/jobs/${jobId}/download/video`, {
     responseType: 'blob',
   });
   return response.data;
 };
 
 export const downloadSummary = async (jobId) => {
-  const response = await api.get(`/api/jobs/${jobId}/download/summary`, {
+  const response = await api.get(`/jobs/${jobId}/download/summary`, {
     responseType: 'text',
   });
   return response.data;
 };
 
 export const generateSummaryVideo = async (jobId) => {
-  const response = await api.post(`/api/jobs/${jobId}/generate-summary-video`);
+  const response = await api.post(`/jobs/${jobId}/generate-summary-video`);
   return response.data;
 };
 
 export const downloadSummaryVideo = async (jobId) => {
-  const response = await api.get(`/api/jobs/${jobId}/download/summary-video`, {
+  const response = await api.get(`/jobs/${jobId}/download/summary-video`, {
     responseType: 'blob',
   });
   return response.data;
 };
 
 export const generateSummary = async (jobId) => {
-  const response = await api.post(`/api/jobs/${jobId}/generate-summary`);
+  const response = await api.post(`/jobs/${jobId}/generate-summary`);
   return response.data;
 };
 
@@ -153,7 +155,8 @@ export const summarizePDF = async (file) => {
   formData.append('file', file);
 
       // Don't set Content-Type - axios will set it automatically with boundary for FormData
-      const response = await api.post('/api/summarize-pdf', formData, {
+      // baseURL is already '/api', so just use '/summarize-pdf' not '/api/summarize-pdf'
+      const response = await api.post('/summarize-pdf', formData, {
         timeout: 300000, // 5 minutes for summarization
       });
   return response.data;
@@ -174,7 +177,8 @@ export const generateVideoFromText = async (text, voiceProvider = 'openai', open
   }
 
       // Don't set Content-Type - axios will set it automatically with boundary for FormData
-      const response = await api.post('/api/generate-video-from-text', formData, {
+      // baseURL is already '/api', so just use '/generate-video-from-text' not '/api/generate-video-from-text'
+      const response = await api.post('/generate-video-from-text', formData, {
         timeout: 600000, // 10 minutes for video generation
       });
   return response.data;
@@ -195,7 +199,8 @@ export const generateReelsVideo = async (text, voiceProvider = 'openai', openaiV
   }
 
       // Don't set Content-Type - axios will set it automatically with boundary for FormData
-      const response = await api.post('/api/generate-reels-video', formData, {
+      // baseURL is already '/api', so just use '/generate-reels-video' not '/api/generate-reels-video'
+      const response = await api.post('/generate-reels-video', formData, {
         timeout: 600000, // 10 minutes for video generation
       });
   return response.data;
@@ -206,17 +211,18 @@ export const listCartesiaVoices = async (language = null, tags = null) => {
   const params = {};
   if (language) params.language = language;
   if (tags) params.tags = tags;
-  const response = await api.get('/api/cartesia/voices', { params });
+  // baseURL is already '/api', so just use '/cartesia/voices' not '/api/cartesia/voices'
+  const response = await api.get('/cartesia/voices', { params });
   return response.data;
 };
 
 export const getCartesiaVoice = async (voiceId) => {
-  const response = await api.get(`/api/cartesia/voices/${voiceId}`);
+  const response = await api.get(`/cartesia/voices/${voiceId}`);
   return response.data;
 };
 
 export const listCartesiaModels = async () => {
-  const response = await api.get('/api/cartesia/models');
+  const response = await api.get('/cartesia/models');
   return response.data;
 };
 

@@ -29,10 +29,21 @@ export default async function handler(req, res) {
 
   try {
     // Get the path segments from the slug parameter
-    const slug = req.query.slug || [];
-    let apiPath = Array.isArray(slug) ? slug.join('/') : slug;
+    // Vercel uses '...slug' as the query key for catch-all routes
+    const slugParam = req.query['...slug'] || req.query.slug;
+    let slug = slugParam || [];
     
-    console.log(`[Proxy] Slug:`, slug);
+    // Handle both array and string formats
+    if (typeof slug === 'string') {
+      slug = slug.split('/').filter(Boolean);
+    } else if (!Array.isArray(slug)) {
+      slug = [];
+    }
+    
+    let apiPath = slug.join('/');
+    
+    console.log(`[Proxy] Slug param:`, slugParam);
+    console.log(`[Proxy] Slug array:`, slug);
     console.log(`[Proxy] API Path (before clean):`, apiPath);
     
     // Remove leading 'api' if present (shouldn't happen, but just in case)
@@ -56,10 +67,10 @@ export default async function handler(req, res) {
       backendUrl = `${BACKEND_URL}/api/${apiPath}`;
     }
     
-    // Add query parameters (excluding slug)
+    // Add query parameters (excluding slug-related keys)
     const queryParams = new URLSearchParams();
     Object.keys(req.query).forEach(key => {
-      if (key !== 'slug') {
+      if (key !== 'slug' && key !== '...slug') {
         queryParams.append(key, req.query[key]);
       }
     });
