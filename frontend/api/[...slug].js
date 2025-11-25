@@ -88,13 +88,18 @@ export default async function handler(req, res) {
       headers: {},
     };
     
-    // Copy all relevant headers
+    // Copy only essential headers (exclude Vercel-specific and problematic headers)
+    const excludedHeaders = [
+      'host', 'connection', 'content-length', 'transfer-encoding',
+      'x-vercel-', 'x-forwarded-', 'forwarded', 'sec-fetch-', 'sec-ch-ua',
+      'accept-encoding', 'accept-language', 'referer', 'origin', 'priority'
+    ];
+    
     Object.keys(req.headers).forEach(key => {
       const lowerKey = key.toLowerCase();
-      if (!['host', 'connection', 'content-length', 'transfer-encoding'].includes(lowerKey)) {
-        if (req.headers[key]) {
-          fetchOptions.headers[key] = req.headers[key];
-        }
+      const shouldExclude = excludedHeaders.some(excluded => lowerKey.startsWith(excluded));
+      if (!shouldExclude && req.headers[key]) {
+        fetchOptions.headers[key] = req.headers[key];
       }
     });
     
@@ -143,19 +148,12 @@ export default async function handler(req, res) {
       console.log(`[Proxy] Content-Type: ${contentType}`);
       
       if (contentType.includes('multipart/form-data')) {
-        // Vercel serverless functions don't parse multipart automatically
-        // We need to parse it using busboy and reconstruct it for the backend
-        console.log('[Proxy] Handling multipart/form-data');
-        console.log('[Proxy] Body is buffer:', Buffer.isBuffer(req.body));
-        console.log('[Proxy] Body type:', typeof req.body);
+        // For multipart/form-data, forward the raw body directly
+        // This avoids parsing/reconstruction issues and preserves the original format
+        console.log('[Proxy] Handling multipart/form-data - forwarding raw body');
         
-        // Parse multipart data using busboy
-        // First, buffer the entire request body since Vercel req might not be a stream
         return new Promise((resolve, reject) => {
-          const FormData = require('form-data');
-          const formData = new FormData();
-          
-          // Buffer the request body first
+          // Buffer the request body
           const chunks = [];
           req.on('data', (chunk) => {
             chunks.push(chunk);
@@ -165,55 +163,24 @@ export default async function handler(req, res) {
             const bodyBuffer = Buffer.concat(chunks);
             console.log(`[Proxy] Request body buffered: ${bodyBuffer.length} bytes`);
             
-            // Now parse with busboy
-            const bb = busboy({ headers: req.headers });
+            // Forward the raw multipart body directly to backend
+            // Preserve the original Content-Type header with boundary
+            fetchOptions.body = bodyBuffer;
+            fetchOptions.headers['Content-Type'] = contentType; // Preserve original boundary
             
-            // Collect all fields and files
-            const fields = {};
-            const files = [];
+            // Remove content-length - let fetch calculate it from the buffer
+            delete fetchOptions.headers['content-length'];
             
-            let fileCount = 0;
-            let fieldCount = 0;
-            let completedFiles = 0;
-            let sent = false; // Guard to prevent multiple sends
-          
-          const sendToBackend = () => {
-            if (sent) {
-              console.log('[Proxy] sendToBackend already called, skipping');
-              return;
-            }
-            sent = true;
-            console.log(`[Proxy] All data collected. Files: ${files.length}, Fields: ${Object.keys(fields).length}`);
-            
-            // Reconstruct FormData for backend
-            for (const [key, value] of Object.entries(fields)) {
-              formData.append(key, value);
-            }
-            
-            for (const file of files) {
-              console.log(`[Proxy] Appending file ${file.name}: ${file.buffer.length} bytes, filename: ${file.filename}`);
-              formData.append(file.name, file.buffer, {
-                filename: file.filename,
-                contentType: file.mimeType || 'application/octet-stream'
-              });
-            }
-            
-            // Update headers
-            delete fetchOptions.headers['content-type'];
-            fetchOptions.body = formData;
-            const formHeaders = formData.getHeaders();
-            console.log('[Proxy] FormData headers:', formHeaders);
-            Object.assign(fetchOptions.headers, formHeaders);
-            
-            console.log('[Proxy] FormData reconstructed, making backend request...');
-            console.log('[Proxy] Request headers:', fetchOptions.headers);
+            console.log('[Proxy] Forwarding raw multipart body to backend...');
+            console.log('[Proxy] Content-Type:', fetchOptions.headers['Content-Type']);
+            console.log('[Proxy] Body size:', bodyBuffer.length, 'bytes');
             
             // Make request to backend
             fetch(fullUrl, fetchOptions)
               .then(async (response) => {
                 console.log(`[Proxy] Backend response: ${response.status} ${response.statusText}`);
                 const responseText = await response.text();
-                console.log('[Proxy] Backend response body:', responseText.substring(0, 500)); // Log first 500 chars
+                console.log('[Proxy] Backend response body:', responseText.substring(0, 500));
                 
                 // Set response status and headers
                 res.status(response.status);
@@ -244,67 +211,6 @@ export default async function handler(req, res) {
                 });
                 resolve();
               });
-          };
-          
-          bb.on('file', (name, file, info) => {
-            fileCount++;
-            const { filename, encoding, mimeType } = info;
-            console.log(`[Proxy] File field: ${name}, filename: ${filename}, mimeType: ${mimeType}`);
-            
-            const fileChunks = [];
-            file.on('data', (data) => {
-              fileChunks.push(data);
-            });
-            
-            file.on('end', () => {
-              const buffer = Buffer.concat(fileChunks);
-              console.log(`[Proxy] File ${name} buffered: ${buffer.length} bytes`);
-              files.push({ name, buffer, filename, mimeType });
-              completedFiles++;
-              
-              // Check if all files are done
-              if (completedFiles === fileCount && Object.keys(fields).length >= fieldCount) {
-                sendToBackend();
-              }
-            });
-            
-            file.on('error', (error) => {
-              console.error(`[Proxy] File stream error for ${name}:`, error);
-            });
-          });
-          
-          bb.on('field', (name, value) => {
-            fieldCount++;
-            console.log(`[Proxy] Field: ${name} = ${value}`);
-            fields[name] = value;
-            
-            // Check if all fields and files are done
-            if (completedFiles === fileCount && Object.keys(fields).length >= fieldCount) {
-              sendToBackend();
-            }
-          });
-          
-          bb.on('finish', () => {
-            console.log('[Proxy] Busboy finished parsing');
-            // sendToBackend will be called when all files and fields are collected
-            // But also check here in case everything was already collected
-            if (!sent && completedFiles === fileCount && Object.keys(fields).length >= fieldCount) {
-              sendToBackend();
-            }
-          });
-          
-          bb.on('error', (error) => {
-            console.error('[Proxy] Busboy error:', error);
-            res.status(400).json({
-              error: 'Failed to parse multipart data',
-              message: error.message
-            });
-            resolve();
-          });
-          
-          // Write the buffered body to busboy
-          bb.write(bodyBuffer);
-          bb.end();
           });
           
           req.on('error', (error) => {
