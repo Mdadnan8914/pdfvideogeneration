@@ -1,6 +1,20 @@
 import axios from 'axios';
 
-const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000';
+// Determine API base URL
+// Use proxy on Vercel to avoid mixed content (HTTPS -> HTTP) issues
+// On localhost, connect directly
+const isVercel = typeof window !== 'undefined' && window.location.hostname.includes('vercel.app');
+const useProxy = isVercel || process.env.REACT_APP_USE_PROXY === 'true';
+
+const API_BASE_URL = useProxy 
+  ? '/api' // Use proxy on Vercel
+  : (process.env.REACT_APP_API_URL || 'http://localhost:8000');
+
+// Log the API URL being used (helpful for debugging)
+console.log('API Base URL:', API_BASE_URL);
+console.log('Environment:', process.env.NODE_ENV);
+console.log('Using Proxy:', useProxy);
+console.log('Is Vercel:', isVercel);
 
 const api = axios.create({
   baseURL: API_BASE_URL,
@@ -29,12 +43,36 @@ api.interceptors.response.use(
     return response;
   },
   (error) => {
-    console.error('API Response Error:', {
+    // Enhanced error logging
+    const errorDetails = {
       message: error.message,
       status: error.response?.status,
+      statusText: error.response?.statusText,
       data: error.response?.data,
-      url: error.config?.url
-    });
+      url: error.config?.url,
+      baseURL: error.config?.baseURL,
+      fullURL: error.config?.baseURL + error.config?.url,
+      code: error.code, // Network errors have codes like 'ERR_NETWORK', 'ERR_CORS', etc.
+      request: error.request
+    };
+    
+    console.error('API Response Error:', errorDetails);
+    
+    // Provide more helpful error messages
+    if (error.code === 'ERR_NETWORK' || error.code === 'ERR_INTERNET_DISCONNECTED') {
+      error.userMessage = 'Network error: Unable to connect to the backend server. Please check if the server is running.';
+    } else if (error.code === 'ERR_CORS') {
+      error.userMessage = 'CORS error: The backend server is not allowing requests from this origin. Please check CORS configuration.';
+    } else if (error.message?.includes('Mixed Content')) {
+      error.userMessage = 'Mixed Content error: Cannot make HTTP requests from HTTPS page. The backend needs to use HTTPS.';
+    } else if (error.code === 'ECONNABORTED' || error.message?.includes('timeout')) {
+      error.userMessage = 'Request timeout: The server took too long to respond. Please try again.';
+    } else if (error.response) {
+      error.userMessage = error.response.data?.detail || error.response.data?.message || `Server error: ${error.response.status} ${error.response.statusText}`;
+    } else {
+      error.userMessage = error.message || 'An unexpected error occurred. Please check the console for details.';
+    }
+    
     return Promise.reject(error);
   }
 );

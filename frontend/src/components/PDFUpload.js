@@ -81,8 +81,19 @@ const PDFUpload = ({ onUploadSuccess, onBack }) => {
       );
       onUploadSuccess(response.job_id);
     } catch (err) {
-      setError(err.response?.data?.detail || 'Failed to upload PDF. Please try again.');
-      console.error('Upload error:', err);
+      // Use enhanced error message if available
+      const errorMessage = err.userMessage || 
+                          err.response?.data?.detail || 
+                          err.message || 
+                          'Failed to upload PDF. Please try again.';
+      setError(errorMessage);
+      console.error('Upload error:', {
+        error: err,
+        message: err.message,
+        code: err.code,
+        response: err.response,
+        userMessage: err.userMessage
+      });
     } finally {
       setIsUploading(false);
     }
