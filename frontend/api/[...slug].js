@@ -4,6 +4,7 @@
  */
 
 const BACKEND_URL = process.env.BACKEND_URL || 'http://54.198.232.153:8000';
+const busboy = require('busboy');
 
 export default async function handler(req, res) {
   console.log(`[Proxy] ========== FUNCTION CALLED ==========`);
@@ -97,6 +98,43 @@ export default async function handler(req, res) {
       }
     });
     
+    // Helper function to handle backend response
+    const handleResponse = async (response) => {
+      console.log(`[Proxy] Backend response: ${response.status} ${response.statusText}`);
+      
+      // Get response data
+      const responseContentType = response.headers.get('content-type') || '';
+      let data;
+      
+      if (responseContentType.includes('application/json')) {
+        data = await response.json();
+      } else if (responseContentType.includes('text/')) {
+        data = await response.text();
+      } else {
+        data = await response.arrayBuffer();
+      }
+      
+      // Set response status and headers
+      res.status(response.status);
+      
+      // Copy response headers
+      response.headers.forEach((value, key) => {
+        const lowerKey = key.toLowerCase();
+        if (!['connection', 'transfer-encoding', 'content-encoding'].includes(lowerKey)) {
+          res.setHeader(key, value);
+        }
+      });
+      
+      // Send response
+      if (data instanceof ArrayBuffer) {
+        res.send(Buffer.from(data));
+      } else {
+        res.json(data);
+      }
+      
+      console.log(`[Proxy] Response sent successfully`);
+    };
+    
     // Handle request body
     if (['POST', 'PUT', 'PATCH'].includes(req.method)) {
       const contentType = req.headers['content-type'] || '';
@@ -105,62 +143,90 @@ export default async function handler(req, res) {
       console.log(`[Proxy] Content-Type: ${contentType}`);
       
       if (contentType.includes('multipart/form-data')) {
-        // For multipart/form-data, we need to preserve the raw body
-        // Vercel serverless functions may parse it, but we need the raw stream
-        // The body should be available as a buffer or stream
+        // Vercel serverless functions don't parse multipart automatically
+        // We need to parse it using busboy and reconstruct it for the backend
         console.log('[Proxy] Handling multipart/form-data');
         console.log('[Proxy] Body is buffer:', Buffer.isBuffer(req.body));
         console.log('[Proxy] Body type:', typeof req.body);
-        console.log('[Proxy] Body constructor:', req.body?.constructor?.name);
         
-        // Try to get raw body - Vercel might provide it as a buffer
-        if (Buffer.isBuffer(req.body)) {
-          // Perfect - we have a raw buffer, pass it through
-          fetchOptions.body = req.body;
-          fetchOptions.headers['Content-Type'] = contentType; // Preserve boundary
-        } else if (req.body && typeof req.body === 'object' && req.body.pipe) {
-          // It's a stream - we'd need to buffer it, but for now try to pass
-          fetchOptions.body = req.body;
-          fetchOptions.headers['Content-Type'] = contentType;
-        } else {
-          // Body was parsed - this is problematic for multipart
-          // We need to reconstruct it using form-data
-          console.log('[Proxy] WARNING: Multipart body was parsed, attempting reconstruction');
-          console.log('[Proxy] Body keys:', req.body ? Object.keys(req.body) : 'null');
+        // Parse multipart data using busboy
+        return new Promise((resolve, reject) => {
+          const FormData = require('form-data');
+          const formData = new FormData();
+          const bb = busboy({ headers: req.headers });
           
-          // Try to reconstruct using form-data library
-          try {
-            const FormData = require('form-data');
-            const formData = new FormData();
+          // Collect all fields and files
+          const fields = {};
+          const files = [];
+          
+          bb.on('file', (name, file, info) => {
+            const { filename, encoding, mimeType } = info;
+            console.log(`[Proxy] File field: ${name}, filename: ${filename}, mimeType: ${mimeType}`);
             
-            // Reconstruct form fields
-            for (const [key, value] of Object.entries(req.body || {})) {
-              if (value && typeof value === 'object') {
-                // File field
-                if (value.data) {
-                  formData.append(key, Buffer.from(value.data), {
-                    filename: value.filename || key,
-                    contentType: value.contentType || 'application/octet-stream'
-                  });
-                } else {
-                  formData.append(key, JSON.stringify(value));
-                }
-              } else {
-                formData.append(key, value);
-              }
+            const chunks = [];
+            file.on('data', (data) => {
+              chunks.push(data);
+            });
+            
+            file.on('end', () => {
+              const buffer = Buffer.concat(chunks);
+              files.push({ name, buffer, filename, mimeType });
+            });
+          });
+          
+          bb.on('field', (name, value) => {
+            console.log(`[Proxy] Field: ${name} = ${value}`);
+            fields[name] = value;
+          });
+          
+          bb.on('finish', () => {
+            // Reconstruct FormData for backend
+            for (const [key, value] of Object.entries(fields)) {
+              formData.append(key, value);
             }
             
-            // Use form-data's headers (includes boundary)
+            for (const file of files) {
+              formData.append(file.name, file.buffer, {
+                filename: file.filename,
+                contentType: file.mimeType || 'application/octet-stream'
+              });
+            }
+            
+            // Update headers
             delete fetchOptions.headers['content-type'];
             fetchOptions.body = formData;
             Object.assign(fetchOptions.headers, formData.getHeaders());
-          } catch (error) {
-            console.error('[Proxy] Error reconstructing FormData:', error);
-            // Fallback: try to pass as-is
-            fetchOptions.body = req.body;
-            fetchOptions.headers['Content-Type'] = contentType;
-          }
-        }
+            
+            console.log('[Proxy] FormData reconstructed, making backend request...');
+            
+            // Make request to backend
+            fetch(fullUrl, fetchOptions)
+              .then(async (response) => {
+                await handleResponse(response);
+                resolve();
+              })
+              .catch(error => {
+                console.error('[Proxy] Backend request error:', error);
+                res.status(500).json({
+                  error: 'Proxy error',
+                  message: error.message
+                });
+                resolve();
+              });
+          });
+          
+          bb.on('error', (error) => {
+            console.error('[Proxy] Busboy error:', error);
+            res.status(400).json({
+              error: 'Failed to parse multipart data',
+              message: error.message
+            });
+            resolve();
+          });
+          
+          // Pipe the request to busboy
+          req.pipe(bb);
+        });
       } else if (contentType.includes('application/json')) {
         fetchOptions.body = JSON.stringify(req.body);
         fetchOptions.headers['Content-Type'] = 'application/json';
@@ -169,44 +235,15 @@ export default async function handler(req, res) {
       }
     }
     
-    console.log(`[Proxy] Making fetch request...`);
-    
-    // Make request to backend
-    const response = await fetch(fullUrl, fetchOptions);
-    
-    console.log(`[Proxy] Backend response: ${response.status} ${response.statusText}`);
-    
-    // Get response data
-    const contentType = response.headers.get('content-type') || '';
-    let data;
-    
-    if (contentType.includes('application/json')) {
-      data = await response.json();
-    } else if (contentType.includes('text/')) {
-      data = await response.text();
-    } else {
-      data = await response.arrayBuffer();
+    // For multipart, the Promise above handles the request and returns early
+    // For other content types, continue with normal flow
+    if (!req.headers['content-type']?.includes('multipart/form-data')) {
+      console.log(`[Proxy] Making fetch request...`);
+      
+      // Make request to backend
+      const response = await fetch(fullUrl, fetchOptions);
+      await handleResponse(response);
     }
-    
-    // Set response status and headers
-    res.status(response.status);
-    
-    // Copy response headers
-    response.headers.forEach((value, key) => {
-      const lowerKey = key.toLowerCase();
-      if (!['connection', 'transfer-encoding', 'content-encoding'].includes(lowerKey)) {
-        res.setHeader(key, value);
-      }
-    });
-    
-    // Send response
-    if (data instanceof ArrayBuffer) {
-      res.send(Buffer.from(data));
-    } else {
-      res.json(data);
-    }
-    
-    console.log(`[Proxy] Response sent successfully`);
     
   } catch (error) {
     console.error('[Proxy] Error:', error.message);
