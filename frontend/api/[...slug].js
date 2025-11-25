@@ -88,27 +88,34 @@ export default async function handler(req, res) {
     
     // Handle request body
     if (['POST', 'PUT', 'PATCH'].includes(req.method)) {
+      const contentType = req.headers['content-type'] || '';
       console.log(`[Proxy] Has body: ${!!req.body}`);
       console.log(`[Proxy] Body type: ${typeof req.body}`);
+      console.log(`[Proxy] Content-Type: ${contentType}`);
       
-      if (req.body) {
-        const contentType = req.headers['content-type'] || '';
-        
-        if (contentType.includes('application/json')) {
-          fetchOptions.body = JSON.stringify(req.body);
-        } else if (contentType.includes('multipart/form-data')) {
-          // For multipart, try to pass through as-is
-          // Vercel may have already parsed it
-          if (Buffer.isBuffer(req.body)) {
-            fetchOptions.body = req.body;
-          } else {
-            // If it's an object, we need to handle it differently
-            // For now, try to stringify or pass as-is
-            fetchOptions.body = req.body;
-          }
-        } else {
+      if (contentType.includes('multipart/form-data')) {
+        // For multipart/form-data, Vercel doesn't parse it automatically
+        // We need to get the raw body stream
+        // Try to get raw body if available, otherwise use parsed body
+        if (req.body && Buffer.isBuffer(req.body)) {
+          // Raw buffer - pass through with original Content-Type (includes boundary)
           fetchOptions.body = req.body;
+          fetchOptions.headers['Content-Type'] = contentType;
+        } else {
+          // If body was parsed or is an object, we need to reconstruct FormData
+          // This shouldn't happen for multipart, but handle it just in case
+          console.log('[Proxy] Multipart body is not a buffer, attempting to reconstruct...');
+          console.log('[Proxy] Body keys:', req.body ? Object.keys(req.body) : 'null');
+          
+          // For now, try to pass as-is - might work if Vercel handles it
+          fetchOptions.body = req.body;
+          fetchOptions.headers['Content-Type'] = contentType;
         }
+      } else if (contentType.includes('application/json')) {
+        fetchOptions.body = JSON.stringify(req.body);
+        fetchOptions.headers['Content-Type'] = 'application/json';
+      } else if (req.body) {
+        fetchOptions.body = req.body;
       }
     }
     
