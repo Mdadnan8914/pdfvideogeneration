@@ -1,9 +1,14 @@
 {
   "buildCommand": "npm run build",
   "outputDirectory": "build",
+  "functions": {
+    "api/**/*.js": {
+      "runtime": "nodejs18.x"
+    }
+  },
   "rewrites": [
     {
-      "source": "/((?!api).*)",
+      "source": "/((?!api|_next|static).*)",
       "destination": "/index.html"
     }
   ],
@@ -19,4 +24,3 @@
     }
   ]
 }
-
