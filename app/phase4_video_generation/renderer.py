@@ -62,7 +62,7 @@ class FrameGeneratorV11:
                 # 2. Text size (Calculated based on WIDTH, not height) - slightly smaller for reels
                 self.font_size = int(self.bg_width / 9)  # Slightly smaller than before (was /8)
                 # 3. Constraint: Only 2 lines per slide max for reels
-                self.max_lines = 2
+                self.max_lines = 4
                 # Use margin_x for both left and right in reels mode
                 self.left_margin = self.margin_x
                 self.right_margin = self.margin_x
@@ -684,7 +684,7 @@ class FrameGeneratorV11:
             
             # Step 4: Fixed 150px left padding - text area starts at exactly 150px from left
             # NO dynamic horizontal padding - left side is fixed at 150px
-            text_area_start_x = 150  # Fixed 150px left padding - never changes
+            text_area_start_x = self.left_margin  # Fixed 150px left padding - never changes
             text_area_end_x = self.bg_width - min_margin_right  # Right boundary uses right margin
             text_area_width = text_area_end_x - text_area_start_x
             
@@ -2386,7 +2386,7 @@ def render_video(
                 if is_reels:
                     # Generate solid white background programmatically for reels
                     logger.info(f"Generating solid white background for reels: {width}x{height}")
-                    bg_image = Image.new('RGB', (width, height), (255, 255, 255))  # Solid white
+                    bg_image = Image.new('RGB', (width, height), (255, 255, 235))  # Solid yellowish-white
                     logger.info(f"Created white background programmatically: {width}x{height}")
                 else:
                     # Main video - use default background
@@ -2640,8 +2640,8 @@ def render_video(
             "-i", "-",                # Input from Pipe
             "-i", str(audio_path),    # Input Audio
             "-c:v", "libx264",        # Force software encoder (safest)
-            "-preset", "ultrafast",   # Speed over compression
-            "-crf", "23",             # Good quality
+            "-preset", "veryfast",   # Speed over compression
+            "-crf", "20",             # Good quality
             "-c:a", "aac",
             "-b:a", "192k",
             "-pix_fmt", "yuv420p",    # Critical for compatibility
